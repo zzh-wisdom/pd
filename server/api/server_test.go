@@ -175,9 +175,9 @@ func mustPutStore(c *C, s *server.Server, store *metapb.Store) {
 
 func readJSONWithURL(url string, data interface{}) error {
 	resp, err := unixClient.Get(url)
-	defer resp.Body.Close()
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	return readJSON(resp.Body, data)
 }
