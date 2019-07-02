@@ -29,8 +29,7 @@ import (
 )
 
 var (
-	dialClient = &http.Client{}
-
+	dialClient     = &http.Client{}
 	pingPrefix     = "pd/ping"
 	errInvalidAddr = errors.New("Invalid pd address, Cannot get connect to it")
 )
@@ -47,9 +46,11 @@ func InitHTTPSClient(CAPath, CertPath, KeyPath string) error {
 		return errors.Trace(err)
 	}
 
-	dialClient = &http.Client{Transport: &http.Transport{
-		TLSClientConfig: tlsConfig,
-	}}
+	dialClient = &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
+		},
+	}
 
 	return nil
 }

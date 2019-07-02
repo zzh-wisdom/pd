@@ -21,8 +21,14 @@ import (
 	"net/http"
 
 	"github.com/juju/errors"
-	"github.com/pingcap/pd/server"
 )
+
+// dialClient used to dail http request.
+var dialClient = &http.Client{
+	Transport: &http.Transport{
+		DisableKeepAlives: true,
+	},
+}
 
 func readJSON(r io.ReadCloser, data interface{}) error {
 	defer r.Close()
@@ -40,7 +46,7 @@ func readJSON(r io.ReadCloser, data interface{}) error {
 }
 
 func postJSON(url string, data []byte) error {
-	resp, err := server.DialClient.Post(url, "application/json", bytes.NewBuffer(data))
+	resp, err := dialClient.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -60,7 +66,7 @@ func doDelete(url string) error {
 	if err != nil {
 		return err
 	}
-	res, err := server.DialClient.Do(req)
+	res, err := dialClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -69,7 +75,7 @@ func doDelete(url string) error {
 }
 
 func doGet(url string) (*http.Response, error) {
-	resp, err := server.DialClient.Get(url)
+	resp, err := dialClient.Get(url)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
