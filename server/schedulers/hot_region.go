@@ -149,11 +149,11 @@ func (h *balanceHotRegionsScheduler) dispatch(typ BalanceType, cluster schedule.
 	defer h.Unlock()
 	switch typ {
 	case hotReadRegionBalance:
-		h.stats.readStatAsLeader = calcScore(cluster.RegionReadStats(), cluster, core.LeaderKind)
+		h.stats.readStatAsLeader = calcScore(cluster, typ, core.LeaderKind)
 		return h.balanceHotReadRegions(cluster)
 	case hotWriteRegionBalance:
-		h.stats.writeStatAsLeader = calcScore(cluster.RegionWriteStats(), cluster, core.LeaderKind)
-		h.stats.writeStatAsPeer = calcScore(cluster.RegionWriteStats(), cluster, core.RegionKind)
+		h.stats.writeStatAsLeader = calcScore(cluster, typ, core.LeaderKind)
+		h.stats.writeStatAsPeer = calcScore(cluster, typ, core.RegionKind)
 		return h.balanceHotWriteRegions(cluster)
 	}
 	return nil
@@ -220,12 +220,31 @@ func (h *balanceHotRegionsScheduler) balanceHotWriteRegions(cluster schedule.Clu
 	return nil
 }
 
-func calcScore(storeItems map[uint64][]*statistics.HotSpotPeerStat, cluster schedule.Cluster, kind core.ResourceKind) statistics.StoreHotRegionsStat {
+func calcScore(cluster schedule.Cluster, typ BalanceType, kind core.ResourceKind) statistics.StoreHotRegionsStat {
+	var storeItems map[uint64][]*statistics.HotSpotPeerStat
+	switch typ {
+	case hotWriteRegionBalance:
+		{
+			storeItems = cluster.RegionWriteStats()
+		}
+	case hotReadRegionBalance:
+		{
+			storeItems = cluster.RegionReadStats()
+		}
+	}
 	stats := make(statistics.StoreHotRegionsStat)
+	storesStats := cluster.GetStoresStats()
 	for storeID, items := range storeItems {
 		// HotDegree is the update times on the hot cache. If the heartbeat report
 		// the flow of the region exceeds the threshold, the scheduler will update the region in
 		// the hot cache and the hotdegree of the region will increase.
+		storeStat, ok := stats[storeID]
+		if !ok {
+			storeStat = &statistics.HotRegionsStat{
+				RegionsStat: make(statistics.RegionsStat, 0, storeHotRegionsDefaultLen),
+			}
+			stats[storeID] = storeStat
+		}
 
 		for _, r := range items {
 			if kind == core.LeaderKind && !r.IsLeader() {
@@ -240,26 +259,31 @@ func calcScore(storeItems map[uint64][]*statistics.HotSpotPeerStat, cluster sche
 				continue
 			}
 
-			storeStat, ok := stats[storeID]
-			if !ok {
-				storeStat = &statistics.HotRegionsStat{
-					RegionsStat: make(statistics.RegionsStat, 0, storeHotRegionsDefaultLen),
-				}
-				stats[storeID] = storeStat
-			}
-
 			s := statistics.HotSpotPeerStat{
 				RegionID:       r.RegionID,
-				FlowBytes:      uint64(r.Stats.Median()),
+				FlowBytes:      r.GetFlowBytes(),
 				HotDegree:      r.HotDegree,
 				LastUpdateTime: r.LastUpdateTime,
 				StoreID:        storeID,
 				AntiCount:      r.AntiCount,
 				Version:        r.Version,
 			}
-			storeStat.TotalFlowBytes += r.FlowBytes
+			storeStat.TotalFlowBytes += r.GetFlowBytes()
 			storeStat.RegionsCount++
 			storeStat.RegionsStat = append(storeStat.RegionsStat, s)
+		}
+
+		if len(storeStat.RegionsStat) > 0 {
+			var storeFlowBytes float64
+			switch typ {
+			case hotWriteRegionBalance:
+				storeFlowBytes, _ = storesStats.GetStoreBytesRate(storeID)
+			case hotReadRegionBalance:
+				_, storeFlowBytes = storesStats.GetStoreBytesRate(storeID)
+			}
+			storeStat.StoreFlowBytes = uint64(storeFlowBytes)
+		} else {
+			delete(stats, storeID)
 		}
 	}
 	return stats
@@ -314,7 +338,7 @@ func (h *balanceHotRegionsScheduler) balanceByPeer(cluster schedule.Cluster, sto
 			candidateStoreIDs = append(candidateStoreIDs, store.GetID())
 		}
 
-		destStoreID = h.selectDestStore(candidateStoreIDs, rs.FlowBytes, srcStoreID, storesStat)
+		destStoreID = h.selectDestStore(candidateStoreIDs, rs.GetFlowBytes(), srcStoreID, storesStat)
 		if destStoreID != 0 {
 			h.peerLimit = h.adjustBalanceLimit(srcStoreID, storesStat)
 
@@ -373,7 +397,7 @@ func (h *balanceHotRegionsScheduler) balanceByLeader(cluster schedule.Cluster, s
 		if len(candidateStoreIDs) == 0 {
 			continue
 		}
-		destStoreID := h.selectDestStore(candidateStoreIDs, rs.FlowBytes, srcStoreID, storesStat)
+		destStoreID := h.selectDestStore(candidateStoreIDs, rs.GetFlowBytes(), srcStoreID, storesStat)
 		if destStoreID == 0 {
 			continue
 		}
@@ -393,14 +417,17 @@ func (h *balanceHotRegionsScheduler) balanceByLeader(cluster schedule.Cluster, s
 // Inside these stores, we choose the one with maximum flow bytes.
 func (h *balanceHotRegionsScheduler) selectSrcStore(stats statistics.StoreHotRegionsStat) (srcStoreID uint64) {
 	var (
-		maxFlowBytes           uint64
-		maxHotStoreRegionCount int
+		maxFlowBytes uint64
+		maxCount     int
 	)
 
-	for storeID, statistics := range stats {
-		count, flowBytes := statistics.RegionsStat.Len(), statistics.TotalFlowBytes
-		if count >= 2 && (count > maxHotStoreRegionCount || (count == maxHotStoreRegionCount && flowBytes > maxFlowBytes)) {
-			maxHotStoreRegionCount = count
+	for storeID, stat := range stats {
+		count, flowBytes := stat.RegionsStat.Len(), stat.StoreFlowBytes
+		if count < 2 {
+			continue
+		}
+		if flowBytes > maxFlowBytes || (flowBytes == maxFlowBytes && count > maxCount) {
+			maxCount = count
 			maxFlowBytes = flowBytes
 			srcStoreID = storeID
 		}
@@ -412,25 +439,18 @@ func (h *balanceHotRegionsScheduler) selectSrcStore(stats statistics.StoreHotReg
 // We choose a target store based on the hot region number and flow bytes of this store.
 func (h *balanceHotRegionsScheduler) selectDestStore(candidateStoreIDs []uint64, regionFlowBytes uint64, srcStoreID uint64, storesStat statistics.StoreHotRegionsStat) (destStoreID uint64) {
 	sr := storesStat[srcStoreID]
-	srcFlowBytes := sr.TotalFlowBytes
-	srcHotRegionsCount := sr.RegionsStat.Len()
+	srcFlowBytes := sr.StoreFlowBytes
 
 	var (
-		minFlowBytes    uint64 = math.MaxUint64
-		minRegionsCount        = int(math.MaxInt32)
+		minFlowBytes uint64 = uint64(float64(srcFlowBytes)*hotRegionScheduleFactor) - regionFlowBytes
+		minCount            = int(math.MaxInt32)
 	)
 	for _, storeID := range candidateStoreIDs {
 		if s, ok := storesStat[storeID]; ok {
-			if srcHotRegionsCount-s.RegionsStat.Len() > 1 && minRegionsCount > s.RegionsStat.Len() {
+			if minFlowBytes > s.StoreFlowBytes || (minFlowBytes == s.StoreFlowBytes && s.RegionsStat.Len() < minCount) {
 				destStoreID = storeID
-				minFlowBytes = s.TotalFlowBytes
-				minRegionsCount = s.RegionsStat.Len()
-				continue
-			}
-			if minRegionsCount == s.RegionsStat.Len() && minFlowBytes > s.TotalFlowBytes &&
-				uint64(float64(srcFlowBytes)*hotRegionScheduleFactor) > s.TotalFlowBytes+2*regionFlowBytes {
-				minFlowBytes = s.TotalFlowBytes
-				destStoreID = storeID
+				minFlowBytes = s.StoreFlowBytes
+				minCount = s.RegionsStat.Len()
 			}
 		} else {
 			destStoreID = storeID

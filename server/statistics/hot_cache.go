@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/pd/pkg/cache"
 	"github.com/pingcap/pd/server/core"
 )
 
@@ -29,14 +28,20 @@ var Denoising = true
 
 const (
 	// RegionHeartBeatReportInterval is the heartbeat report interval of a region.
-	RegionHeartBeatReportInterval = 60
+	RegionHeartBeatReportInterval = 60 // seconds
 	// StoreHeartBeatReportInterval is the heartbeat report interval of a store.
-	StoreHeartBeatReportInterval = 10
+	StoreHeartBeatReportInterval = 10 // seconds
 
-	statCacheMaxLen            = 1000
-	storeStatCacheMaxLen       = 200
-	hotWriteRegionMinFlowRate  = 16 * 1024
-	hotReadRegionMinFlowRate   = 128 * 1024
+	statCacheMaxLen = 1000
+	//storeStatCacheMaxLen = 200
+	storeStatCacheMaxLen = 50
+
+	hotWriteRegionMinFlowRate = 16 * 1024
+	hotReadRegionMinFlowRate  = 128 * 1024
+
+	activeWriteRegionMinFlowRate = 100 // B/s
+	activeReadRegionMinFlowRate  = 100 // B/s
+
 	minHotRegionReportInterval = 3
 	hotRegionAntiCount         = 1
 )
@@ -62,14 +67,14 @@ func (k FlowKind) String() string {
 
 // HotStoresStats saves the hotspot peer's statistics.
 type HotStoresStats struct {
-	hotStoreStats  map[uint64]cache.Cache         // storeID -> hot regions
+	hotStoreStats  map[uint64]*TopN               // storeID -> hot regions
 	storesOfRegion map[uint64]map[uint64]struct{} // regionID -> storeIDs
 }
 
 // NewHotStoresStats creates a HotStoresStats
 func NewHotStoresStats() *HotStoresStats {
 	return &HotStoresStats{
-		hotStoreStats:  make(map[uint64]cache.Cache),
+		hotStoreStats:  make(map[uint64]*TopN),
 		storesOfRegion: make(map[uint64]map[uint64]struct{}),
 	}
 }
@@ -129,7 +134,7 @@ func (f *HotStoresStats) CheckRegionFlow(region *core.RegionInfo, kind FlowKind)
 
 		hotStoreStats, ok := f.hotStoreStats[storeID]
 		if ok {
-			if v, isExist := hotStoreStats.Peek(region.GetID()); isExist {
+			if v := hotStoreStats.GetTopN(region.GetID()); v != nil {
 				oldRegionStat = v.(*HotSpotPeerStat)
 				// This is used for the simulator.
 				if Denoising {
@@ -173,10 +178,10 @@ func (f *HotStoresStats) Update(item *HotSpotPeerStat) {
 	} else {
 		hotStoreStat, ok := f.hotStoreStats[item.StoreID]
 		if !ok {
-			hotStoreStat = cache.NewCache(statCacheMaxLen, cache.TwoQueueCache)
+			hotStoreStat = NewTopN(storeStatCacheMaxLen)
 			f.hotStoreStats[item.StoreID] = hotStoreStat
 		}
-		hotStoreStat.Put(item.RegionID, item)
+		hotStoreStat.Put(item)
 		index, ok := f.storesOfRegion[item.RegionID]
 		if !ok {
 			index = make(map[uint64]struct{})
@@ -205,7 +210,7 @@ func (f *HotStoresStats) isRegionHotWithPeer(region *core.RegionInfo, peer *meta
 	if !ok {
 		return false
 	}
-	if stat, ok := stats.Peek(region.GetID()); ok {
+	if stat := stats.GetTopN(region.GetID()); stat != nil {
 		return stat.(*HotSpotPeerStat).HotDegree >= hotThreshold
 	}
 	return false
@@ -231,30 +236,30 @@ type hotSpotPeerStatGenerator struct {
 const rollingWindowsSize = 5
 
 // GenHotSpotPeerStats implements HotSpotPeerStatsGenerator.
-func (flowStats *hotSpotPeerStatGenerator) GenHotSpotPeerStats(stats *StoresStats) *HotSpotPeerStat {
+func (statGen *hotSpotPeerStatGenerator) GenHotSpotPeerStats(stats *StoresStats) *HotSpotPeerStat {
 	var hotRegionThreshold uint64
-	switch flowStats.Kind {
+	switch statGen.Kind {
 	case WriteFlow:
-		hotRegionThreshold = calculateWriteHotThresholdWithStore(stats, flowStats.StoreID)
+		hotRegionThreshold = activeWriteRegionMinFlowRate
 	case ReadFlow:
-		hotRegionThreshold = calculateReadHotThresholdWithStore(stats, flowStats.StoreID)
+		hotRegionThreshold = activeReadRegionMinFlowRate
 	}
-	flowBytes := flowStats.FlowBytes
-	oldItem := flowStats.lastHotSpotPeerStats
-	region := flowStats.Region
+	flowBytes := statGen.FlowBytes
+	oldItem := statGen.lastHotSpotPeerStats
+	region := statGen.Region
 	newItem := &HotSpotPeerStat{
 		RegionID:       region.GetID(),
-		FlowBytes:      flowStats.FlowBytes,
-		FlowKeys:       flowStats.FlowKeys,
+		FlowBytes:      statGen.FlowBytes,
+		FlowKeys:       statGen.FlowKeys,
 		LastUpdateTime: time.Now(),
-		StoreID:        flowStats.StoreID,
+		StoreID:        statGen.StoreID,
 		Version:        region.GetMeta().GetRegionEpoch().GetVersion(),
 		AntiCount:      hotRegionAntiCount,
-		Kind:           flowStats.Kind,
-		needDelete:     flowStats.Expired,
+		Kind:           statGen.Kind,
+		needDelete:     statGen.Expired,
 	}
 
-	if region.GetLeader().GetStoreId() == flowStats.StoreID {
+	if region.GetLeader().GetStoreId() == statGen.StoreID {
 		newItem.isLeader = true
 	}
 
@@ -362,7 +367,7 @@ func (w *HotSpotCache) Update(item *HotSpotPeerStat) {
 
 // RegionStats returns hot items according to kind
 func (w *HotSpotCache) RegionStats(kind FlowKind) map[uint64][]*HotSpotPeerStat {
-	var flowMap map[uint64]cache.Cache
+	var flowMap map[uint64]*TopN
 	switch kind {
 	case WriteFlow:
 		flowMap = w.writeFlow.hotStoreStats
@@ -370,15 +375,15 @@ func (w *HotSpotCache) RegionStats(kind FlowKind) map[uint64][]*HotSpotPeerStat 
 		flowMap = w.readFlow.hotStoreStats
 	}
 	res := make(map[uint64][]*HotSpotPeerStat)
-	for storeID, elements := range flowMap {
-		values := elements.Elems()
+	for storeID, tn := range flowMap {
+		topn := tn.GetAllTopN()
 		stat, ok := res[storeID]
 		if !ok {
-			stat = make([]*HotSpotPeerStat, len(values))
+			stat = make([]*HotSpotPeerStat, len(topn))
 			res[storeID] = stat
 		}
-		for i := range values {
-			stat[i] = values[i].Value.(*HotSpotPeerStat)
+		for i := range topn {
+			stat[i] = topn[i].(*HotSpotPeerStat)
 		}
 	}
 	return res
@@ -402,16 +407,30 @@ func (w *HotSpotCache) RandHotRegionFromStore(storeID uint64, kind FlowKind, hot
 func (w *HotSpotCache) CollectMetrics(stats *StoresStats) {
 	for storeID, flowStats := range w.writeFlow.hotStoreStats {
 		storeTag := fmt.Sprintf("store-%d", storeID)
-		threshold := calculateWriteHotThresholdWithStore(stats, storeID)
 		hotCacheStatusGauge.WithLabelValues("total_length", storeTag, "write").Set(float64(flowStats.Len()))
-		hotCacheStatusGauge.WithLabelValues("hotThreshold", storeTag, "write").Set(float64(threshold))
+		var topnMin, restMax uint64
+		if stat := flowStats.GetTopNMin(); stat != nil {
+			topnMin = stat.(*HotSpotPeerStat).GetFlowBytes()
+		}
+		if stat := flowStats.GetRestMax(); stat != nil {
+			restMax = stat.(*HotSpotPeerStat).GetFlowBytes()
+		}
+		hotCacheStatusGauge.WithLabelValues("topn_min", storeTag, "write").Set(float64(topnMin))
+		hotCacheStatusGauge.WithLabelValues("rest_max", storeTag, "write").Set(float64(restMax))
 	}
 
 	for storeID, flowStats := range w.readFlow.hotStoreStats {
 		storeTag := fmt.Sprintf("store-%d", storeID)
-		threshold := calculateReadHotThresholdWithStore(stats, storeID)
 		hotCacheStatusGauge.WithLabelValues("total_length", storeTag, "read").Set(float64(flowStats.Len()))
-		hotCacheStatusGauge.WithLabelValues("hotThreshold", storeTag, "read").Set(float64(threshold))
+		var topnMin, restMax uint64
+		if stat := flowStats.GetTopNMin(); stat != nil {
+			topnMin = stat.(*HotSpotPeerStat).GetFlowBytes()
+		}
+		if stat := flowStats.GetRestMax(); stat != nil {
+			restMax = stat.(*HotSpotPeerStat).GetFlowBytes()
+		}
+		hotCacheStatusGauge.WithLabelValues("topn_min", storeTag, "read").Set(float64(topnMin))
+		hotCacheStatusGauge.WithLabelValues("rest_max", storeTag, "read").Set(float64(restMax))
 	}
 }
 

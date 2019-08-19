@@ -58,15 +58,34 @@ func (stat HotSpotPeerStat) IsNew() bool {
 	return stat.isNew
 }
 
+// ID returns region ID (implementing TopNItem).
+func (stat *HotSpotPeerStat) ID() uint64 {
+	return stat.RegionID
+}
+
+// GetFlowBytes returns denoised flow bytes if possible.
+func (stat *HotSpotPeerStat) GetFlowBytes() uint64 {
+	if stat.Stats == nil {
+		return stat.FlowBytes
+	}
+	return uint64(stat.Stats.Median())
+}
+
+// Less compares FlowBytes (implementing TopNItem).
+func (stat *HotSpotPeerStat) Less(than TopNItem) bool {
+	return stat.GetFlowBytes() < than.(*HotSpotPeerStat).GetFlowBytes()
+}
+
 // RegionsStat is a list of a group region state type
 type RegionsStat []HotSpotPeerStat
 
 func (m RegionsStat) Len() int           { return len(m) }
 func (m RegionsStat) Swap(i, j int)      { m[i], m[j] = m[j], m[i] }
-func (m RegionsStat) Less(i, j int) bool { return m[i].FlowBytes < m[j].FlowBytes }
+func (m RegionsStat) Less(i, j int) bool { return m[i].GetFlowBytes() < m[j].GetFlowBytes() }
 
 // HotRegionsStat records all hot regions statistics
 type HotRegionsStat struct {
+	StoreFlowBytes uint64      `json:"store_flow_bytes"`
 	TotalFlowBytes uint64      `json:"total_flow_bytes"`
 	RegionsCount   int         `json:"regions_count"`
 	RegionsStat    RegionsStat `json:"statistics"`
