@@ -127,7 +127,7 @@ func (s u64Set) String() string {
 // OpStep describes the basic scheduling steps that can not be subdivided.
 type OpStep interface {
 	fmt.Stringer
-	ExpectConfVerChange() bool
+	ConfVerChanged(region *core.RegionInfo) bool
 	IsFinish(region *core.RegionInfo) bool
 	Influence(opInfluence OpInfluence, region *core.RegionInfo)
 }
@@ -137,10 +137,9 @@ type TransferLeader struct {
 	FromStore, ToStore uint64
 }
 
-// ExpectConfVerChange returns if the confver of a region should be increased
-// after this step
-func (tl TransferLeader) ExpectConfVerChange() bool {
-	return false
+// ConfVerChanged returns true if the conf version has been changed by this step
+func (tl TransferLeader) ConfVerChanged(region *core.RegionInfo) bool {
+	return false // transfer leader never change the conf version
 }
 
 func (tl TransferLeader) String() string {
@@ -168,10 +167,12 @@ type AddPeer struct {
 	ToStore, PeerID uint64
 }
 
-// ExpectConfVerChange returns if the confver of a region should be increased
-// after this step
-func (ap AddPeer) ExpectConfVerChange() bool {
-	return true
+// ConfVerChanged returns true if the conf version has been changed by this step
+func (ap AddPeer) ConfVerChanged(region *core.RegionInfo) bool {
+	if p := region.GetStoreVoter(ap.ToStore); p != nil {
+		return p.GetId() == ap.PeerID
+	}
+	return false
 }
 func (ap AddPeer) String() string {
 	return fmt.Sprintf("add peer %v on store %v", ap.PeerID, ap.ToStore)
@@ -208,10 +209,12 @@ type AddLearner struct {
 	ToStore, PeerID uint64
 }
 
-// ExpectConfVerChange returns if the confver of a region should be increased
-// after this step
-func (al AddLearner) ExpectConfVerChange() bool {
-	return true
+// ConfVerChanged returns true if the conf version has been changed by this step
+func (al AddLearner) ConfVerChanged(region *core.RegionInfo) bool {
+	if p := region.GetStorePeer(al.ToStore); p != nil {
+		return p.GetId() == al.PeerID
+	}
+	return false
 }
 
 func (al AddLearner) String() string {
@@ -249,10 +252,12 @@ type PromoteLearner struct {
 	ToStore, PeerID uint64
 }
 
-// ExpectConfVerChange returns if the confver of a region should be increased
-// after this step
-func (pl PromoteLearner) ExpectConfVerChange() bool {
-	return true
+// ConfVerChanged returns true if the conf version has been changed by this step
+func (pl PromoteLearner) ConfVerChanged(region *core.RegionInfo) bool {
+	if p := region.GetStoreVoter(pl.ToStore); p != nil {
+		return p.GetId() == pl.PeerID
+	}
+	return false
 }
 
 func (pl PromoteLearner) String() string {
@@ -278,10 +283,9 @@ type RemovePeer struct {
 	FromStore uint64
 }
 
-// ExpectConfVerChange returns if the confver of a region should be increased
-// after this step
-func (rp RemovePeer) ExpectConfVerChange() bool {
-	return true
+// ConfVerChanged returns true if the conf version has been changed by this step
+func (rp RemovePeer) ConfVerChanged(region *core.RegionInfo) bool {
+	return region.GetStorePeer(rp.FromStore) == nil
 }
 
 func (rp RemovePeer) String() string {
@@ -314,9 +318,8 @@ type MergeRegion struct {
 	IsPassive bool
 }
 
-// ExpectConfVerChange returns if the confver of a region should be increased
-// after this step
-func (mr MergeRegion) ExpectConfVerChange() bool {
+// ConfVerChanged returns true if the conf version has been changed by this step
+func (mr MergeRegion) ConfVerChanged(region *core.RegionInfo) bool {
 	return false
 }
 
@@ -351,9 +354,8 @@ type SplitRegion struct {
 	Policy           pdpb.CheckPolicy
 }
 
-// ExpectConfVerChange returns if the confver of a region should be increased
-// after this step
-func (sr SplitRegion) ExpectConfVerChange() bool {
+// ConfVerChanged returns true if the conf version has been changed by this step
+func (sr SplitRegion) ConfVerChanged(region *core.RegionInfo) bool {
 	return false
 }
 
@@ -382,10 +384,12 @@ type AddLightPeer struct {
 	ToStore, PeerID uint64
 }
 
-// ExpectConfVerChange returns if the confver of a region should be increased
-// after this step
-func (ap AddLightPeer) ExpectConfVerChange() bool {
-	return true
+// ConfVerChanged returns true if the conf version has been changed by this step
+func (ap AddLightPeer) ConfVerChanged(region *core.RegionInfo) bool {
+	if p := region.GetStoreVoter(ap.ToStore); p != nil {
+		return p.GetId() == ap.PeerID
+	}
+	return false
 }
 
 func (ap AddLightPeer) String() string {
@@ -417,10 +421,12 @@ type AddLightLearner struct {
 	ToStore, PeerID uint64
 }
 
-// ExpectConfVerChange returns if the confver of a region should be increased
-// after this step
-func (al AddLightLearner) ExpectConfVerChange() bool {
-	return true
+// ConfVerChanged returns true if the conf version has been changed by this step
+func (al AddLightLearner) ConfVerChanged(region *core.RegionInfo) bool {
+	if p := region.GetStoreLearner(al.ToStore); p != nil {
+		return p.GetId() == al.PeerID
+	}
+	return false
 }
 
 func (al AddLightLearner) String() string {
@@ -459,8 +465,10 @@ type Operator struct {
 	createTime  time.Time
 	// startTime is used to record the start time of an operator which is added into running operators.
 	startTime time.Time
-	stepTime  int64
-	level     core.PriorityLevel
+	// dropTime is used to record the time when the operator be dropped.
+	dropTime time.Time
+	stepTime int64
+	level    core.PriorityLevel
 }
 
 // NewOperator creates a new operator.
@@ -547,9 +555,29 @@ func (o *Operator) SetStartTime(t time.Time) {
 	o.startTime = t
 }
 
-// GetStartTime ges the start time for operator.
+// GetStartTime gets the start time for operator.
 func (o *Operator) GetStartTime() time.Time {
 	return o.startTime
+}
+
+// IsStarted returns true if the operator is started.
+func (o *Operator) IsStarted() bool {
+	return !o.startTime.IsZero()
+}
+
+// SetDropTime sets the drop time for operator.
+func (o *Operator) SetDropTime(t time.Time) {
+	o.dropTime = t
+}
+
+// GetDropTime gets drop time of the operator.
+func (o *Operator) GetDropTime() time.Time {
+	return o.dropTime
+}
+
+// IsDropped returns true if the operator has been dropped.
+func (o *Operator) IsDropped() bool {
+	return !o.dropTime.IsZero()
 }
 
 // Len returns the operator's steps count.
@@ -582,11 +610,15 @@ func (o *Operator) Check(region *core.RegionInfo) OpStep {
 }
 
 // ConfVerChanged returns the number of confver has consumed by steps
-func (o *Operator) ConfVerChanged() int {
+func (o *Operator) ConfVerChanged(region *core.RegionInfo) int {
 	total := 0
 	current := atomic.LoadInt32(&o.currentStep)
-	for _, step := range o.steps[0:current] {
-		if step.ExpectConfVerChange() {
+	if current == int32(len(o.steps)) {
+		current--
+	}
+	// including current step, it may has taken effects in this heartbeat
+	for _, step := range o.steps[0 : current+1] {
+		if step.ConfVerChanged(region) {
 			total++
 		}
 	}

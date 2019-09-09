@@ -89,10 +89,10 @@ func (s *shuffleHotRegionScheduler) Schedule(cluster schedule.Cluster) []*operat
 func (s *shuffleHotRegionScheduler) dispatch(typ BalanceType, cluster schedule.Cluster) []*operator.Operator {
 	switch typ {
 	case hotReadRegionBalance:
-		s.stats.readStatAsLeader = calcScore(cluster, typ, core.LeaderKind)
+		s.stats.readStatAsLeader = calcScore(cluster, newOpInfluence("shuffle", 0, 0), typ, core.LeaderKind)
 		return s.randomSchedule(cluster, s.stats.readStatAsLeader)
 	case hotWriteRegionBalance:
-		s.stats.writeStatAsLeader = calcScore(cluster, typ, core.LeaderKind)
+		s.stats.writeStatAsLeader = calcScore(cluster, newOpInfluence("shuffle", 0, 0), typ, core.LeaderKind)
 		return s.randomSchedule(cluster, s.stats.writeStatAsLeader)
 	}
 	return nil
@@ -100,6 +100,9 @@ func (s *shuffleHotRegionScheduler) dispatch(typ BalanceType, cluster schedule.C
 
 func (s *shuffleHotRegionScheduler) randomSchedule(cluster schedule.Cluster, storeStats statistics.StoreHotRegionsStat) []*operator.Operator {
 	for _, stats := range storeStats {
+		if stats.RegionsStat.Len() <= 0 {
+			continue
+		}
 		i := s.r.Intn(stats.RegionsStat.Len())
 		r := stats.RegionsStat[i]
 		// select src region
