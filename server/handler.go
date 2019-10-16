@@ -735,6 +735,24 @@ func (h *Handler) GetIncorrectNamespaceRegions() ([]*core.RegionInfo, error) {
 	return c.cachedCluster.GetRegionStatsByType(statistics.IncorrectNamespace), nil
 }
 
+// GetOfflinePeer gets the region with offline peer.
+func (h *Handler) GetOfflinePeer() ([]*core.RegionInfo, error) {
+	c := h.s.GetRaftCluster()
+	if c == nil {
+		return nil, ErrNotBootstrapped
+	}
+	return c.cachedCluster.GetRegionStatsByType(statistics.OfflinePeer), nil
+}
+
+// GetEmptyRegion gets the region with empty size.
+func (h *Handler) GetEmptyRegion() ([]*core.RegionInfo, error) {
+	c := h.s.GetRaftCluster()
+	if c == nil {
+		return nil, ErrNotBootstrapped
+	}
+	return c.cachedCluster.GetRegionStatsByType(statistics.EmptyRegion), nil
+}
+
 // ResetTS resets the ts with specified tso.
 func (h *Handler) ResetTS(ts uint64) error {
 	tsoServer := h.s
