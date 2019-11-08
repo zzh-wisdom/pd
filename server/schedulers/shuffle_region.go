@@ -27,7 +27,10 @@ func init() {
 	})
 }
 
+const shuffleRegionName = "shuffle-region-scheduler"
+
 type shuffleRegionScheduler struct {
+	name string
 	*baseScheduler
 	selector *schedule.RandomSelector
 }
@@ -36,17 +39,18 @@ type shuffleRegionScheduler struct {
 // between stores.
 func newShuffleRegionScheduler(opController *schedule.OperatorController) schedule.Scheduler {
 	filters := []schedule.Filter{
-		schedule.StoreStateFilter{MoveRegion: true},
+		schedule.StoreStateFilter{ActionScope: shuffleRegionName, MoveRegion: true},
 	}
 	base := newBaseScheduler(opController)
 	return &shuffleRegionScheduler{
+		name:          shuffleRegionName,
 		baseScheduler: base,
 		selector:      schedule.NewRandomSelector(filters),
 	}
 }
 
 func (s *shuffleRegionScheduler) GetName() string {
-	return "shuffle-region-scheduler"
+	return s.name
 }
 
 func (s *shuffleRegionScheduler) GetType() string {
@@ -65,7 +69,7 @@ func (s *shuffleRegionScheduler) Schedule(cluster schedule.Cluster) []*schedule.
 		return nil
 	}
 
-	excludedFilter := schedule.NewExcludedFilter(nil, region.GetStoreIds())
+	excludedFilter := schedule.NewExcludedFilter(s.GetName(), nil, region.GetStoreIds())
 	newPeer := s.scheduleAddPeer(cluster, excludedFilter)
 	if newPeer == nil {
 		schedulerCounter.WithLabelValues(s.GetName(), "no_new_peer").Inc()

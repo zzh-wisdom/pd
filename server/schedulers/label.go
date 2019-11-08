@@ -26,7 +26,10 @@ func init() {
 	})
 }
 
+const labelSchedulerName = "label-scheduler"
+
 type labelScheduler struct {
+	name string
 	*baseScheduler
 	selector *schedule.BalanceSelector
 }
@@ -36,16 +39,17 @@ type labelScheduler struct {
 // the store with the specific label.
 func newLabelScheduler(opController *schedule.OperatorController) schedule.Scheduler {
 	filters := []schedule.Filter{
-		schedule.StoreStateFilter{TransferLeader: true},
+		schedule.StoreStateFilter{ActionScope: labelSchedulerName, TransferLeader: true},
 	}
 	return &labelScheduler{
+		name:          labelSchedulerName,
 		baseScheduler: newBaseScheduler(opController),
 		selector:      schedule.NewBalanceSelector(core.LeaderKind, filters),
 	}
 }
 
 func (s *labelScheduler) GetName() string {
-	return "label-scheduler"
+	return s.name
 }
 
 func (s *labelScheduler) GetType() string {
@@ -80,8 +84,8 @@ func (s *labelScheduler) Schedule(cluster schedule.Cluster) []*schedule.Operator
 			for _, p := range region.GetPendingPeers() {
 				excludeStores[p.GetStoreId()] = struct{}{}
 			}
-			filter := schedule.NewExcludedFilter(nil, excludeStores)
-			target := s.selector.SelectTarget(cluster, cluster.GetFollowerStores(region), filter)
+			f := schedule.NewExcludedFilter(s.GetName(), nil, excludeStores)
+			target := s.selector.SelectTarget(cluster, cluster.GetFollowerStores(region), f)
 			if target == nil {
 				log.Debug("label scheduler no target found for region", zap.Uint64("region-id", region.GetID()))
 				schedulerCounter.WithLabelValues(s.GetName(), "no_target").Inc()

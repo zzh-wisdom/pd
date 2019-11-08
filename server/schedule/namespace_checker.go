@@ -21,8 +21,11 @@ import (
 	"go.uber.org/zap"
 )
 
+const namespaceCheckerName = "namespace-checker"
+
 // NamespaceChecker ensures region to go to the right place.
 type NamespaceChecker struct {
+	name       string
 	cluster    Cluster
 	filters    []Filter
 	classifier namespace.Classifier
@@ -31,10 +34,11 @@ type NamespaceChecker struct {
 // NewNamespaceChecker creates a namespace checker.
 func NewNamespaceChecker(cluster Cluster, classifier namespace.Classifier) *NamespaceChecker {
 	filters := []Filter{
-		StoreStateFilter{MoveRegion: true},
+		StoreStateFilter{ActionScope: namespaceCheckerName, MoveRegion: true},
 	}
 
 	return &NamespaceChecker{
+		name:       namespaceCheckerName,
 		cluster:    cluster,
 		filters:    filters,
 		classifier: classifier,
@@ -102,7 +106,7 @@ func (n *NamespaceChecker) SelectBestPeerToRelocate(region *core.RegionInfo, tar
 // SelectBestStoreToRelocate randomly returns the store to relocate
 func (n *NamespaceChecker) SelectBestStoreToRelocate(region *core.RegionInfo, targets []*core.StoreInfo) uint64 {
 	selector := NewRandomSelector(n.filters)
-	target := selector.SelectTarget(n.cluster, targets, NewExcludedFilter(nil, region.GetStoreIds()))
+	target := selector.SelectTarget(n.cluster, targets, NewExcludedFilter(n.name, nil, region.GetStoreIds()))
 	if target == nil {
 		return 0
 	}
@@ -120,7 +124,7 @@ func (n *NamespaceChecker) isExists(stores []*core.StoreInfo, storeID uint64) bo
 
 func (n *NamespaceChecker) getNamespaceStores(region *core.RegionInfo) []*core.StoreInfo {
 	ns := n.classifier.GetRegionNamespace(region)
-	filteredStores := n.filter(n.cluster.GetStores(), NewNamespaceFilter(n.classifier, ns))
+	filteredStores := n.filter(n.cluster.GetStores(), NewNamespaceFilter(n.name, n.classifier, ns))
 
 	return filteredStores
 }

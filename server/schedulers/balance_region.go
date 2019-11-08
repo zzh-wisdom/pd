@@ -47,21 +47,21 @@ type balanceRegionScheduler struct {
 // each store balanced.
 func newBalanceRegionScheduler(opController *schedule.OperatorController, opts ...BalanceRegionCreateOption) schedule.Scheduler {
 	taintStores := newTaintCache()
-	filters := []schedule.Filter{
-		schedule.StoreStateFilter{MoveRegion: true},
-		schedule.NewCacheFilter(taintStores),
-	}
 	base := newBaseScheduler(opController)
 	s := &balanceRegionScheduler{
 		baseScheduler: base,
-		selector:      schedule.NewBalanceSelector(core.RegionKind, filters),
-		taintStores:   taintStores,
 		opController:  opController,
 		counter:       balanceRegionCounter,
+		taintStores:   taintStores,
 	}
 	for _, opt := range opts {
 		opt(s)
 	}
+	filters := []schedule.Filter{
+		schedule.StoreStateFilter{ActionScope: s.GetName(), MoveRegion: true},
+		schedule.NewCacheFilter(s.GetName(), taintStores),
+	}
+	s.selector = schedule.NewBalanceSelector(core.RegionKind, filters)
 	return s
 }
 
@@ -179,9 +179,9 @@ func (s *balanceRegionScheduler) transferPeer(cluster schedule.Cluster, region *
 	// scoreGuard guarantees that the distinct score will not decrease.
 	stores := cluster.GetRegionStores(region)
 	source := cluster.GetStore(oldPeer.GetStoreId())
-	scoreGuard := schedule.NewDistinctScoreFilter(cluster.GetLocationLabels(), stores, source)
+	scoreGuard := schedule.NewDistinctScoreFilter(s.GetName(), cluster.GetLocationLabels(), stores, source)
 
-	checker := schedule.NewReplicaChecker(cluster, nil)
+	checker := schedule.NewReplicaChecker(cluster, nil, s.GetName())
 	storeID, _ := checker.SelectBestReplacementStore(region, oldPeer, scoreGuard)
 	if storeID == 0 {
 		schedulerCounter.WithLabelValues(s.GetName(), "no_replacement").Inc()
@@ -218,9 +218,9 @@ func (s *balanceRegionScheduler) transferPeer(cluster schedule.Cluster, region *
 	}
 	sourceLabel := strconv.FormatUint(sourceID, 10)
 	targetLabel := strconv.FormatUint(targetID, 10)
-	s.counter.WithLabelValues("move_peer", source.GetAddress()+"-out", sourceLabel).Inc()
-	s.counter.WithLabelValues("move_peer", target.GetAddress()+"-in", targetLabel).Inc()
-	s.counter.WithLabelValues("direction", "from_to", sourceLabel+"-"+targetLabel).Inc()
+	s.counter.WithLabelValues("move-peer", source.GetAddress()+"-out", sourceLabel).Inc()
+	s.counter.WithLabelValues("move-peer", target.GetAddress()+"-in", targetLabel).Inc()
+	balanceDirectionCounter.WithLabelValues(s.GetName(), sourceLabel, targetLabel).Inc()
 	return op
 }
 
@@ -231,8 +231,8 @@ func (s *balanceRegionScheduler) transferPeer(cluster schedule.Cluster, region *
 // which may recover soon.
 func (s *balanceRegionScheduler) hasPotentialTarget(cluster schedule.Cluster, region *core.RegionInfo, source *core.StoreInfo, opInfluence schedule.OpInfluence) bool {
 	filters := []schedule.Filter{
-		schedule.NewExcludedFilter(nil, region.GetStoreIds()),
-		schedule.NewDistinctScoreFilter(cluster.GetLocationLabels(), cluster.GetRegionStores(region), source),
+		schedule.NewExcludedFilter(s.GetName(), nil, region.GetStoreIds()),
+		schedule.NewDistinctScoreFilter(s.GetName(), cluster.GetLocationLabels(), cluster.GetRegionStores(region), source),
 	}
 
 	for _, store := range cluster.GetStores() {

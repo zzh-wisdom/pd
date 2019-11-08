@@ -31,6 +31,7 @@ const (
 	defaultAdjacentLeaderLimit   = 64
 	minAdjacentSchedulerInterval = time.Second
 	maxAdjacentSchedulerInterval = 30 * time.Second
+	balanceAdjacentRegionName    = "balance-adjacent-region-scheduler"
 )
 
 func init() {
@@ -64,6 +65,7 @@ func init() {
 // 2. the two regions' leader will not in the public store of this two regions
 type balanceAdjacentRegionScheduler struct {
 	*baseScheduler
+	name                 string
 	selector             *schedule.RandomSelector
 	leaderLimit          uint64
 	peerLimit            uint64
@@ -92,11 +94,12 @@ func (a *adjacentState) len() int {
 // on each store.
 func newBalanceAdjacentRegionScheduler(opController *schedule.OperatorController, args ...uint64) schedule.Scheduler {
 	filters := []schedule.Filter{
-		schedule.StoreStateFilter{TransferLeader: true, MoveRegion: true},
+		schedule.StoreStateFilter{ActionScope: balanceAdjacentRegionName, TransferLeader: true, MoveRegion: true},
 	}
 	base := newBaseScheduler(opController)
 	s := &balanceAdjacentRegionScheduler{
 		baseScheduler: base,
+		name:          balanceAdjacentRegionName,
 		selector:      schedule.NewRandomSelector(filters),
 		leaderLimit:   defaultAdjacentLeaderLimit,
 		peerLimit:     defaultAdjacentPeerLimit,
@@ -113,7 +116,7 @@ func newBalanceAdjacentRegionScheduler(opController *schedule.OperatorController
 }
 
 func (l *balanceAdjacentRegionScheduler) GetName() string {
-	return "balance-adjacent-region-scheduler"
+	return l.name
 }
 
 func (l *balanceAdjacentRegionScheduler) GetType() string {
@@ -287,7 +290,7 @@ func (l *balanceAdjacentRegionScheduler) dispersePeer(cluster schedule.Cluster, 
 		return nil
 	}
 
-	scoreGuard := schedule.NewDistinctScoreFilter(cluster.GetLocationLabels(), stores, source)
+	scoreGuard := schedule.NewDistinctScoreFilter(l.GetName(), cluster.GetLocationLabels(), stores, source)
 	excludeStores := region.GetStoreIds()
 	for _, storeID := range l.cacheRegions.assignedStoreIds {
 		if _, ok := excludeStores[storeID]; !ok {
@@ -296,7 +299,7 @@ func (l *balanceAdjacentRegionScheduler) dispersePeer(cluster schedule.Cluster, 
 	}
 
 	filters := []schedule.Filter{
-		schedule.NewExcludedFilter(nil, excludeStores),
+		schedule.NewExcludedFilter(l.GetName(), nil, excludeStores),
 		scoreGuard,
 	}
 	target := l.selector.SelectTarget(cluster, cluster.GetStores(), filters...)
