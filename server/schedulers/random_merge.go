@@ -26,7 +26,10 @@ func init() {
 	})
 }
 
+const randomMergeName = "random-merge-scheduler"
+
 type randomMergeScheduler struct {
+	name string
 	*baseScheduler
 	selector *schedule.RandomSelector
 }
@@ -35,17 +38,18 @@ type randomMergeScheduler struct {
 // then merges them.
 func newRandomMergeScheduler(opController *schedule.OperatorController) schedule.Scheduler {
 	filters := []schedule.Filter{
-		schedule.StoreStateFilter{MoveRegion: true},
+		schedule.StoreStateFilter{ActionScope: randomMergeName, MoveRegion: true},
 	}
 	base := newBaseScheduler(opController)
 	return &randomMergeScheduler{
+		name:          randomMergeName,
 		baseScheduler: base,
 		selector:      schedule.NewRandomSelector(filters),
 	}
 }
 
 func (s *randomMergeScheduler) GetName() string {
-	return "random-merge-scheduler"
+	return s.name
 }
 
 func (s *randomMergeScheduler) GetType() string {

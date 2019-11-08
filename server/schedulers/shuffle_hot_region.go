@@ -107,10 +107,13 @@ func (s *shuffleHotRegionScheduler) randomSchedule(cluster schedule.Cluster, sto
 		}
 		srcStoreID := srcRegion.GetLeader().GetStoreId()
 		srcStore := cluster.GetStore(srcStoreID)
+		if srcStore == nil {
+			log.Error("failed to get the source store", zap.Uint64("store-id", srcStoreID))
+		}
 		filters := []schedule.Filter{
-			schedule.StoreStateFilter{MoveRegion: true},
-			schedule.NewExcludedFilter(srcRegion.GetStoreIds(), srcRegion.GetStoreIds()),
-			schedule.NewDistinctScoreFilter(cluster.GetLocationLabels(), cluster.GetRegionStores(srcRegion), srcStore),
+			schedule.StoreStateFilter{ActionScope: s.GetName(), MoveRegion: true},
+			schedule.NewExcludedFilter(s.GetName(), srcRegion.GetStoreIds(), srcRegion.GetStoreIds()),
+			schedule.NewDistinctScoreFilter(s.GetName(), cluster.GetLocationLabels(), cluster.GetRegionStores(srcRegion), srcStore),
 		}
 		stores := cluster.GetStores()
 		destStoreIDs := make([]uint64, 0, len(stores))

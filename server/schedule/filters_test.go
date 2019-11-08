@@ -25,7 +25,7 @@ var _ = Suite(&testFiltersSuite{})
 type testFiltersSuite struct{}
 
 func (s *testReplicationSuite) TestPendingPeerFilter(c *C) {
-	filter := NewPendingPeerCountFilter()
+	filter := NewPendingPeerCountFilter("")
 	opt := mockoption.NewScheduleOptions()
 	tc := mockcluster.NewCluster(opt)
 	store := core.NewStoreInfo(&metapb.Store{Id: 1})

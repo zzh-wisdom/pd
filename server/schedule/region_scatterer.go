@@ -23,6 +23,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const regionScatterName = "region-scatter"
+
 type selectedStores struct {
 	mu     sync.Mutex
 	stores map[uint64]struct{}
@@ -50,18 +52,19 @@ func (s *selectedStores) reset() {
 	s.stores = make(map[uint64]struct{})
 }
 
-func (s *selectedStores) newFilter() Filter {
+func (s *selectedStores) newFilter(scope string) Filter {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cloned := make(map[uint64]struct{})
 	for id := range s.stores {
 		cloned[id] = struct{}{}
 	}
-	return NewExcludedFilter(nil, cloned)
+	return NewExcludedFilter(scope, nil, cloned)
 }
 
 // RegionScatterer scatters regions.
 type RegionScatterer struct {
+	name       string
 	cluster    Cluster
 	classifier namespace.Classifier
 	filters    []Filter
@@ -72,10 +75,11 @@ type RegionScatterer struct {
 // RegionScatter is used for the `Lightning`, it will scatter the specified regions before import data.
 func NewRegionScatterer(cluster Cluster, classifier namespace.Classifier) *RegionScatterer {
 	return &RegionScatterer{
+		name:       regionScatterName,
 		cluster:    cluster,
 		classifier: classifier,
 		filters: []Filter{
-			StoreStateFilter{},
+			StoreStateFilter{ActionScope: regionScatterName},
 		},
 		selected: newSelectedStores(),
 	}
@@ -140,7 +144,7 @@ func (r *RegionScatterer) selectPeerToReplace(stores map[uint64]*core.StoreInfo,
 	// scoreGuard guarantees that the distinct score will not decrease.
 	regionStores := r.cluster.GetRegionStores(region)
 	sourceStore := r.cluster.GetStore(oldPeer.GetStoreId())
-	scoreGuard := NewDistinctScoreFilter(r.cluster.GetLocationLabels(), regionStores, sourceStore)
+	scoreGuard := NewDistinctScoreFilter(r.name, r.cluster.GetLocationLabels(), regionStores, sourceStore)
 
 	candidates := make([]*core.StoreInfo, 0, len(stores))
 	for _, store := range stores {
@@ -165,9 +169,9 @@ func (r *RegionScatterer) selectPeerToReplace(stores map[uint64]*core.StoreInfo,
 func (r *RegionScatterer) collectAvailableStores(region *core.RegionInfo) map[uint64]*core.StoreInfo {
 	namespace := r.classifier.GetRegionNamespace(region)
 	filters := []Filter{
-		r.selected.newFilter(),
-		NewExcludedFilter(nil, region.GetStoreIds()),
-		NewNamespaceFilter(r.classifier, namespace),
+		r.selected.newFilter(r.name),
+		NewExcludedFilter(r.name, nil, region.GetStoreIds()),
+		NewNamespaceFilter(r.name, r.classifier, namespace),
 	}
 	filters = append(filters, r.filters...)
 
