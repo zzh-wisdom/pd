@@ -46,15 +46,10 @@ type balanceLeaderScheduler struct {
 // each store balanced.
 func newBalanceLeaderScheduler(opController *schedule.OperatorController, opts ...BalanceLeaderCreateOption) schedule.Scheduler {
 	taintStores := newTaintCache()
-	filters := []schedule.Filter{
-		schedule.StoreStateFilter{TransferLeader: true},
-		schedule.NewCacheFilter(taintStores),
-	}
 	base := newBaseScheduler(opController)
 
 	s := &balanceLeaderScheduler{
 		baseScheduler: base,
-		selector:      schedule.NewBalanceSelector(core.LeaderKind, filters),
 		taintStores:   taintStores,
 		opController:  opController,
 		counter:       balanceLeaderCounter,
@@ -62,6 +57,11 @@ func newBalanceLeaderScheduler(opController *schedule.OperatorController, opts .
 	for _, opt := range opts {
 		opt(s)
 	}
+	filters := []schedule.Filter{
+		schedule.StoreStateFilter{ActionScope: s.GetName(), TransferLeader: true},
+		schedule.NewCacheFilter(s.GetName(), taintStores),
+	}
+	s.selector = schedule.NewBalanceSelector(core.LeaderKind, filters)
 	return s
 }
 
@@ -218,8 +218,9 @@ func (l *balanceLeaderScheduler) createOperator(region *core.RegionInfo, source,
 	schedulerCounter.WithLabelValues(l.GetName(), "new_operator").Inc()
 	sourceLabel := strconv.FormatUint(sourceID, 10)
 	targetLabel := strconv.FormatUint(targetID, 10)
-	l.counter.WithLabelValues("move_leader", source.GetAddress()+"-out", sourceLabel).Inc()
-	l.counter.WithLabelValues("move_leader", target.GetAddress()+"-in", targetLabel).Inc()
+	l.counter.WithLabelValues("move-leader", source.GetAddress()+"-out", sourceLabel).Inc()
+	l.counter.WithLabelValues("move-leader", target.GetAddress()+"-in", targetLabel).Inc()
+	balanceDirectionCounter.WithLabelValues(l.GetName(), sourceLabel, targetLabel).Inc()
 	op := schedule.CreateTransferLeaderOperator("balance-leader", region, region.GetLeader().GetStoreId(), targetID, schedule.OpBalance)
 	return []*schedule.Operator{op}
 }
