@@ -259,3 +259,34 @@ func (s *testFollowerTsoSuite) TestRequest(c *C) {
 	c.Assert(err, NotNil)
 	c.Assert(strings.Contains(err.Error(), "not leader"), IsTrue)
 }
+
+var _ = Suite(&testResetTSSuite{})
+
+type testResetTSSuite struct {
+	client       *clientv3.Client
+	svr          *Server
+	cleanup      CleanupFunc
+	grpcPDClient pdpb.PDClient
+}
+
+func (s *testResetTSSuite) TestConcurrcyRequest(c *C) {
+	leader, cleanup := mustRunTestServer(c)
+	defer cleanup()
+	mustWaitLeader(c, []*Server{leader})
+
+	c.Assert(leader, NotNil)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	now := time.Now()
+	for i := 0; i < 2; i++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i <= 100; i++ {
+				physical := now.Add(time.Duration(2*i)*time.Minute).UnixNano() / int64(time.Millisecond)
+				ts := uint64(physical << 18)
+				leader.GetHandler().ResetTS(ts)
+			}
+		}()
+	}
+	wg.Wait()
+}
