@@ -11,6 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package keyvisual implements keyvisualService as the backend for the KeyVisualizer component, providing a visual web
+// page to show key heatmap of the TiKV cluster, which is useful for troubleshooting and reasoning inefficient
+// application usage patterns.
 package keyvisual
 
 import (
@@ -37,7 +40,6 @@ var (
 	}
 )
 
-// keyvisualService provides the service of heatmap statistics of the key.
 type keyvisualService struct {
 	*http.ServeMux
 	svr *server.Server
@@ -45,17 +47,16 @@ type keyvisualService struct {
 	rd  *render.Render
 }
 
-// NewKeyvisualService creates a HTTP handler for heatmap service.
+// NewKeyvisualService creates a HTTP handler for heatmaps service.
 func NewKeyvisualService(ctx context.Context, svr *server.Server) (http.Handler, server.APIGroup) {
-	mux := http.NewServeMux()
 	k := &keyvisualService{
-		ServeMux: mux,
+		ServeMux: http.NewServeMux(),
 		svr:      svr,
 		ctx:      ctx,
 		rd:       render.New(render.Options{StreamingJSON: true}),
 	}
 
-	k.HandleFunc("/pd/apis/keyvisual/v1/heatmaps", k.Heatmap)
+	k.HandleFunc("/pd/apis/keyvisual/v1/heatmaps", k.heatmaps)
 	handler := negroni.New(
 		serverapi.NewRuntimeServiceValidator(svr, defaultRegisterAPIGroupInfo),
 		serverapi.NewRedirector(svr),
@@ -65,8 +66,7 @@ func NewKeyvisualService(ctx context.Context, svr *server.Server) (http.Handler,
 	return handler, defaultRegisterAPIGroupInfo
 }
 
-// Heatmap returns the heatmap data.
-func (s *keyvisualService) Heatmap(w http.ResponseWriter, r *http.Request) {
+func (s *keyvisualService) heatmaps(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	form := r.URL.Query()
 	startKey := form.Get("startkey")
@@ -117,17 +117,17 @@ func (s *keyvisualService) run() {
 		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
-			cluster := s.svr.GetRaftCluster()
-			if cluster == nil || !serverapi.IsServiceAllowed(s.svr, defaultRegisterAPIGroupInfo) {
+			rc := s.svr.GetRaftCluster()
+			if rc == nil || !serverapi.IsServiceAllowed(s.svr, defaultRegisterAPIGroupInfo) {
 				continue
 			}
-			s.scanRegions(cluster)
+			s.scanRegions(rc)
 			// TODO: implements the stats
 		}
 	}
 }
 
-func (s *keyvisualService) scanRegions(cluster *cluster.RaftCluster) []*core.RegionInfo {
+func (s *keyvisualService) scanRegions(rc *cluster.RaftCluster) []*core.RegionInfo {
 	var key []byte
 	limit := 1024
 	regions := make([]*core.RegionInfo, 0, limit)
@@ -137,7 +137,7 @@ func (s *keyvisualService) scanRegions(cluster *cluster.RaftCluster) []*core.Reg
 			return nil
 		default:
 		}
-		rs := cluster.ScanRegions(key, []byte(""), limit)
+		rs := rc.ScanRegions(key, []byte(""), limit)
 		length := len(rs)
 		if length == 0 {
 			break
