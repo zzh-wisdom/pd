@@ -20,15 +20,19 @@ import (
 	"github.com/pingcap/pd/pkg/codec"
 )
 
-// TiDBLabelStrategy implements the LabelStrategy interface. Get Label Information from TiDB.
-func TiDBLabelStrategy() LabelStrategy {
-	return tidbLabelStrategy{}
+type tidbLabelStrategy struct {
 }
 
-type tidbLabelStrategy struct{}
+// TiDBLabelStrategy implements the LabelStrategy interface. Get Label Information from TiDB.
+func TiDBLabelStrategy() LabelStrategy {
+	return &tidbLabelStrategy{}
+}
+
+func (s *tidbLabelStrategy) Background() {
+}
 
 // CrossBorder does not allow cross tables or cross indexes within a table.
-func (tidbLabelStrategy) CrossBorder(startKey, endKey string) bool {
+func (s *tidbLabelStrategy) CrossBorder(startKey, endKey string) bool {
 	startBytes, endBytes := codec.Key(Bytes(startKey)), codec.Key(Bytes(endKey))
 	startIsMeta, startTableID := startBytes.MetaOrTable()
 	endIsMeta, endTableID := endBytes.MetaOrTable()
@@ -45,7 +49,7 @@ func (tidbLabelStrategy) CrossBorder(startKey, endKey string) bool {
 
 // Label will parse the ID information of the table and index.
 // Fixme: the label information should get from tidb.
-func (tidbLabelStrategy) Label(key string) (label LabelKey) {
+func (s *tidbLabelStrategy) Label(key string) (label LabelKey) {
 	keyBytes := Bytes(key)
 	label.Key = hex.EncodeToString(keyBytes)
 	decodeKey := codec.Key(keyBytes)

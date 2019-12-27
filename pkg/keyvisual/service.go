@@ -17,22 +17,42 @@
 package keyvisual
 
 import (
+	"compress/gzip"
 	"context"
+	"encoding/json"
+	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/pd/pkg/apiutil/serverapi"
+	"github.com/pingcap/pd/pkg/keyvisual/decorator"
+	"github.com/pingcap/pd/pkg/keyvisual/input"
+	"github.com/pingcap/pd/pkg/keyvisual/matrix"
+	"github.com/pingcap/pd/pkg/keyvisual/region"
+	"github.com/pingcap/pd/pkg/keyvisual/storage"
 	"github.com/pingcap/pd/server"
-	"github.com/pingcap/pd/server/cluster"
-	"github.com/pingcap/pd/server/core"
 	"github.com/unrolled/render"
 	"github.com/urfave/negroni"
 	"go.uber.org/zap"
 )
 
+const (
+	maxDisplayY = 1536
+)
+
 var (
+	defaultStatConfig = storage.StatConfig{
+		LayersConfig: []storage.LayerConfig{
+			{Len: 60, Ratio: 2},                         // step 1 minutes, total 60, 1 hour
+			{Len: 60 / 2 * 24, Ratio: 30 / 2},           // step 2 minutes, total 720, 1 day
+			{Len: 60 / 30 * 24 * 7, Ratio: 4 * 60 / 30}, // step 30 minutes, total 336, 1 week
+			{Len: 24 * 30 / 4, Ratio: 0},                // step 4 hours, total 180, 1mount
+		},
+	}
+
 	defaultRegisterAPIGroupInfo = server.APIGroup{
 		IsCore:  false,
 		Name:    "keyvisual",
@@ -45,28 +65,45 @@ type keyvisualService struct {
 	svr *server.Server
 	ctx context.Context
 	rd  *render.Render
+
+	stat     *storage.Stat
+	strategy matrix.Strategy
 }
 
 // NewKeyvisualService creates a HTTP handler for heatmaps service.
-func NewKeyvisualService(ctx context.Context, svr *server.Server) (http.Handler, server.APIGroup) {
+func NewKeyvisualService(ctx context.Context, svr *server.Server, in input.StatInput) (http.Handler, server.APIGroup) {
+	labelStrategy := decorator.TiDBLabelStrategy()
+	go labelStrategy.Background()
+
+	strategy := matrix.DistanceStrategy(labelStrategy, math.Phi, 15)
+
+	stat := storage.NewStat(defaultStatConfig, strategy, in.GetStartTime())
+	go in.Background(stat)
+
 	k := &keyvisualService{
 		ServeMux: http.NewServeMux(),
 		svr:      svr,
 		ctx:      ctx,
 		rd:       render.New(render.Options{StreamingJSON: true}),
+		stat:     stat,
+		strategy: strategy,
 	}
 
-	k.HandleFunc("/pd/apis/keyvisual/v1/heatmaps", k.heatmaps)
+	k.HandleFunc("/pd/apis/keyvisual/v1/heatmaps", k.Heatmaps)
 	handler := negroni.New(
 		serverapi.NewRuntimeServiceValidator(svr, defaultRegisterAPIGroupInfo),
 		serverapi.NewRedirector(svr),
 		negroni.Wrap(k),
 	)
-	go k.run()
 	return handler, defaultRegisterAPIGroupInfo
 }
 
-func (s *keyvisualService) heatmaps(w http.ResponseWriter, r *http.Request) {
+// NewHandler creates a KeyvisualService with CoreInput.
+func NewHandler(ctx context.Context, svr *server.Server) (http.Handler, server.APIGroup) {
+	return NewKeyvisualService(ctx, svr, input.CoreInput(ctx, svr))
+}
+
+func (s *keyvisualService) Heatmaps(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	form := r.URL.Query()
 	startKey := form.Get("startkey")
@@ -96,6 +133,11 @@ func (s *keyvisualService) heatmaps(w http.ResponseWriter, r *http.Request) {
 		endTime = time.Unix(tsSec, 0)
 	}
 
+	if !(startTime.Before(endTime) && (endKey == "" || startKey < endKey)) {
+		s.rd.JSON(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
 	log.Info("Request matrix",
 		zap.Time("start-time", startTime),
 		zap.Time("end-time", endTime),
@@ -103,51 +145,25 @@ func (s *keyvisualService) heatmaps(w http.ResponseWriter, r *http.Request) {
 		zap.String("end-key", endKey),
 		zap.String("type", typ),
 	)
-	// TODO: get the heatmap
-	s.rd.JSON(w, http.StatusNotImplemented, "not implemented")
-}
 
-// FIXME: works well with leader changed.
-func (s *keyvisualService) run() {
-	// TODO: make the ticker consistent with heartbeat interval
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-s.ctx.Done():
-			return
-		case <-ticker.C:
-			rc := s.svr.GetRaftCluster()
-			if rc == nil || !serverapi.IsServiceAllowed(s.svr, defaultRegisterAPIGroupInfo) {
-				continue
+	baseTag := region.IntoTag(typ)
+	plane := s.stat.Range(startTime, endTime, startKey, endKey, baseTag)
+	resp := plane.Pixel(s.strategy, maxDisplayY, region.GetDisplayTags(baseTag))
+
+	var encoder *json.Encoder
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer func() {
+			if err := gz.Close(); err != nil {
+				log.Warn("gzip close error", zap.Error(err))
 			}
-			s.scanRegions(rc)
-			// TODO: implements the stats
-		}
+		}()
+		encoder = json.NewEncoder(gz)
+	} else {
+		encoder = json.NewEncoder(w)
 	}
-}
-
-func (s *keyvisualService) scanRegions(rc *cluster.RaftCluster) []*core.RegionInfo {
-	var key []byte
-	limit := 1024
-	regions := make([]*core.RegionInfo, 0, limit)
-	for {
-		select {
-		case <-s.ctx.Done():
-			return nil
-		default:
-		}
-		rs := rc.ScanRegions(key, []byte(""), limit)
-		length := len(rs)
-		if length == 0 {
-			break
-
-		}
-		regions = append(regions, rs...)
-		key = rs[length-1].GetEndKey()
-		if len(key) == 0 {
-			break
-		}
+	if err := encoder.Encode(resp); err != nil {
+		log.Warn("json encode or write error", zap.Error(err))
 	}
-	return regions
 }

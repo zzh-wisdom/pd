@@ -72,7 +72,7 @@ func NewTestServer(ctx context.Context, cfg *config.Config) (*TestServer, error)
 		ctx,
 		cfg,
 		api.NewHandler,
-		keyvisual.NewKeyvisualService,
+		keyvisual.NewHandler,
 	)
 	if err != nil {
 		return nil, err

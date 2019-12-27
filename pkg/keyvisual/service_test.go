@@ -11,18 +11,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package decorator contains all implementations of LabelStrategy.
-package decorator
-
-// LabelKey is the decoration key.
-type LabelKey struct {
-	Key    string   `json:"key"`
-	Labels []string `json:"labels"`
-}
-
-// LabelStrategy requires cross-border determination and key decoration scheme.
-type LabelStrategy interface {
-	Background()
-	CrossBorder(startKey, endKey string) bool
-	Label(key string) LabelKey
-}
+package keyvisual

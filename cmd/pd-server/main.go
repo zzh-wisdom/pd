@@ -98,7 +98,7 @@ func main() {
 		ctx,
 		cfg,
 		api.NewHandler,
-		keyvisual.NewKeyvisualService)
+		keyvisual.NewHandler)
 	if err != nil {
 		log.Fatal("create server failed", zap.Error(err))
 	}
