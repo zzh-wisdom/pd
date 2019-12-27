@@ -13,7 +13,9 @@
 
 package matrix
 
-import "encoding/hex"
+import (
+	"encoding/hex"
+)
 
 type splitTag int
 

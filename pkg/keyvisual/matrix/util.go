@@ -13,7 +13,9 @@
 
 package matrix
 
-import "sort"
+import (
+	"sort"
+)
 
 // MemsetUint64 sets all elements of the uint64 slice to v.
 func MemsetUint64(slice []uint64, v uint64) {
