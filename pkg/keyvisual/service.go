@@ -100,7 +100,7 @@ func NewKeyvisualService(ctx context.Context, svr *server.Server, in input.StatI
 
 // NewHandler creates a KeyvisualService with CoreInput.
 func NewHandler(ctx context.Context, svr *server.Server) (http.Handler, server.APIGroup) {
-	return NewKeyvisualService(ctx, svr, input.CoreInput(ctx, svr))
+	return NewKeyvisualService(ctx, svr, input.CoreInput(ctx, svr, defaultRegisterAPIGroupInfo))
 }
 
 func (s *keyvisualService) Heatmaps(w http.ResponseWriter, r *http.Request) {
