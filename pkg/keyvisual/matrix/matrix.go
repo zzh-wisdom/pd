@@ -16,18 +16,14 @@ package matrix
 
 import (
 	"time"
-)
 
-// LabelKey is the decoration key.
-type LabelKey struct {
-	Key    string   `json:"key"`
-	Labels []string `json:"labels"`
-}
+	"github.com/pingcap/pd/pkg/keyvisual/decorator"
+)
 
 // Matrix is the front end displays the required data.
 type Matrix struct {
 	DataMap  map[string][][]uint64 `json:"data"`
-	KeyAxis  []LabelKey            `json:"keyAxis"`
+	KeyAxis  []decorator.LabelKey  `json:"keyAxis"`
 	TimeAxis []int64               `json:"timeAxis"`
 }
 
@@ -35,7 +31,7 @@ type Matrix struct {
 func CreateMatrix(strategy Strategy, times []time.Time, keys []string, valuesListLen int) Matrix {
 	dataMap := make(map[string][][]uint64, valuesListLen)
 	// collect label keys
-	keyAxis := make([]LabelKey, len(keys))
+	keyAxis := make([]decorator.LabelKey, len(keys))
 	for i, key := range keys {
 		keyAxis[i] = strategy.Label(key)
 	}

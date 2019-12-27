@@ -13,15 +13,19 @@
 
 package matrix
 
+import (
+	"github.com/pingcap/pd/pkg/keyvisual/decorator"
+)
+
 type averageHelper struct {
 }
 
 type averageStrategy struct {
-	LabelStrategy
+	decorator.LabelStrategy
 }
 
 // AverageStrategy adopts the strategy of equal distribution when buckets are split.
-func AverageStrategy(label LabelStrategy) Strategy {
+func AverageStrategy(label decorator.LabelStrategy) Strategy {
 	return averageStrategy{
 		LabelStrategy: label,
 	}

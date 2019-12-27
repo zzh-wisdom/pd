@@ -18,11 +18,10 @@ import (
 	"fmt"
 
 	"github.com/pingcap/pd/pkg/codec"
-	"github.com/pingcap/pd/pkg/keyvisual/matrix"
 )
 
 // TiDBLabelStrategy implements the LabelStrategy interface. Get Label Information from TiDB.
-func TiDBLabelStrategy() matrix.LabelStrategy {
+func TiDBLabelStrategy() LabelStrategy {
 	return tidbLabelStrategy{}
 }
 
@@ -46,7 +45,7 @@ func (tidbLabelStrategy) CrossBorder(startKey, endKey string) bool {
 
 // Label will parse the ID information of the table and index.
 // Fixme: the label information should get from tidb.
-func (tidbLabelStrategy) Label(key string) (label matrix.LabelKey) {
+func (tidbLabelStrategy) Label(key string) (label LabelKey) {
 	keyBytes := Bytes(key)
 	label.Key = hex.EncodeToString(keyBytes)
 	decodeKey := codec.Key(keyBytes)

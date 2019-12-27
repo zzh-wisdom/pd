@@ -15,6 +15,8 @@ package matrix
 
 import (
 	"encoding/hex"
+
+	"github.com/pingcap/pd/pkg/keyvisual/decorator"
 )
 
 type splitTag int
@@ -31,16 +33,10 @@ type splitStrategy interface {
 	Split(dst, src chunk, tag splitTag, axesIndex int, helper interface{})
 }
 
-// LabelStrategy is implemented in the decorator package. Requires cross-border determination and key decoration scheme.
-type LabelStrategy interface {
-	CrossBorder(startKey, endKey string) bool
-	Label(key string) LabelKey
-}
-
 // Strategy is part of the customizable strategy in Matrix generation.
 type Strategy interface {
 	splitStrategy
-	LabelStrategy
+	decorator.LabelStrategy
 }
 
 // NaiveLabelStrategy is one of the simplest LabelStrategy.
@@ -52,9 +48,9 @@ func (s NaiveLabelStrategy) CrossBorder(startKey, endKey string) bool {
 }
 
 // Label only decodes the key.
-func (s NaiveLabelStrategy) Label(key string) LabelKey {
+func (s NaiveLabelStrategy) Label(key string) decorator.LabelKey {
 	str := hex.EncodeToString([]byte(key))
-	return LabelKey{
+	return decorator.LabelKey{
 		Key:    str,
 		Labels: []string{str},
 	}

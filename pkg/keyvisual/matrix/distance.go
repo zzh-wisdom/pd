@@ -17,6 +17,8 @@ import (
 	"math"
 	"sort"
 	"sync"
+
+	"github.com/pingcap/pd/pkg/keyvisual/decorator"
 )
 
 // TODO:
@@ -28,14 +30,14 @@ type distanceHelper struct {
 }
 
 type distanceStrategy struct {
-	LabelStrategy
+	decorator.LabelStrategy
 	SplitRatio float64
 	SplitLevel int
 }
 
 // DistanceStrategy adopts the strategy that the closer the split time is to the current time, the more traffic is
 // allocated, when buckets are split.
-func DistanceStrategy(label LabelStrategy, ratio float64, level int) Strategy {
+func DistanceStrategy(label decorator.LabelStrategy, ratio float64, level int) Strategy {
 	return &distanceStrategy{
 		SplitRatio:    1.0 / ratio,
 		SplitLevel:    level,
