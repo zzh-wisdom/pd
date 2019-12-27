@@ -53,6 +53,43 @@ func (k Key) TableID() int64 {
 	return tableID
 }
 
+// RowID returns the row ID of the key, if the key is not table key, returns 0.
+func (k Key) RowID() int64 {
+	_, key, err := DecodeBytes(k)
+	if err != nil {
+		// should never happen
+		return 0
+	}
+	if !bytes.HasPrefix(key, tablePrefix) {
+		return 0
+	}
+	if len(key) < 19 || !(key[9] == '_' && key[10] == 'r') {
+		return 0
+	}
+	key = key[11:19]
+
+	_, rowID, _ := DecodeInt(key)
+	return rowID
+}
+
+// IndexID returns the row ID of the key, if the key is not table key, returns 0.
+func (k Key) IndexID() int64 {
+	_, key, err := DecodeBytes(k)
+	if err != nil {
+		// should never happen
+		return 0
+	}
+	if !bytes.HasPrefix(key, tablePrefix) {
+		return 0
+	}
+	if len(key) < 19 || !(key[9] == '_' && key[10] == 'i') {
+		return 0
+	}
+	key = key[11:19]
+	_, indexID, _ := DecodeInt(key)
+	return indexID
+}
+
 // MetaOrTable checks if the key is a meta key or table key.
 // If the key is a meta key, it returns true and 0.
 // If the key is a table key, it returns false and table ID.
