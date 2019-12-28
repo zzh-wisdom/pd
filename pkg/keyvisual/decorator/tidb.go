@@ -14,18 +14,66 @@
 package decorator
 
 import (
+	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/pd/pkg/codec"
+	"github.com/pingcap/pd/server"
+	"go.etcd.io/etcd/clientv3"
+	"go.uber.org/zap"
 )
 
+// AddressCrawler returns the address of tidb
+type AddressCrawler func() []string
+
+const (
+	retryCnt                  = 10
+	etcdGetTimeout            = time.Second
+	tidbServerInformationPath = "/tidb/server/info"
+)
+
+// LocalServerCrawler gets the latest tidb address list from the local pd server.
+var LocalServerCrawler = func(ctx context.Context, svr *server.Server) AddressCrawler {
+	cli := svr.GetClient()
+	return func() []string {
+		for i := 0; i < retryCnt; i++ {
+			var res []string
+			ectx, cancel := context.WithTimeout(ctx, etcdGetTimeout)
+			resp, err := cli.Get(ectx, tidbServerInformationPath, clientv3.WithPrefix())
+			cancel()
+			if err != nil {
+				log.Warn("get key failed", zap.String("key", tidbServerInformationPath), zap.Error(err))
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+			for _, kv := range resp.Kvs {
+				v := make(map[string]interface{})
+				err = json.Unmarshal(kv.Value, &v)
+				if err != nil {
+					log.Warn("get key failed", zap.String("key", tidbServerInformationPath), zap.Error(err))
+					continue
+				}
+				res = append(res, v["ip"].(string))
+			}
+			return res
+		}
+		return nil
+	}
+}
+
 type tidbLabelStrategy struct {
+	addrCrawler AddressCrawler
 }
 
 // TiDBLabelStrategy implements the LabelStrategy interface. Get Label Information from TiDB.
-func TiDBLabelStrategy() LabelStrategy {
-	return &tidbLabelStrategy{}
+func TiDBLabelStrategy(c AddressCrawler) LabelStrategy {
+	return &tidbLabelStrategy{
+		addrCrawler: c,
+	}
 }
 
 func (s *tidbLabelStrategy) Background() {

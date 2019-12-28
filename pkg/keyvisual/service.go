@@ -72,7 +72,7 @@ type keyvisualService struct {
 
 // NewKeyvisualService creates a HTTP handler for heatmaps service.
 func NewKeyvisualService(ctx context.Context, svr *server.Server, in input.StatInput) (http.Handler, server.APIGroup) {
-	labelStrategy := decorator.TiDBLabelStrategy()
+	labelStrategy := decorator.TiDBLabelStrategy(decorator.LocalServerCrawler(ctx, svr))
 	go labelStrategy.Background()
 
 	strategy := matrix.DistanceStrategy(labelStrategy, math.Phi, 15)
