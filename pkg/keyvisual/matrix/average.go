@@ -44,7 +44,8 @@ func (averageStrategy) Split(dst, src chunk, tag splitTag, axesIndex int, helper
 	}
 
 	start := 0
-	for startKey := src.Keys[0]; !equal(dst.Keys[start], startKey); start++ {
+	for startKey := src.Keys[0]; !equal(dst.Keys[start], startKey); {
+		start++
 	}
 	end := start + 1
 

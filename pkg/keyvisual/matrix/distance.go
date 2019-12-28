@@ -102,7 +102,8 @@ func (s *distanceStrategy) Split(dst, src chunk, tag splitTag, axesIndex int, he
 	}
 
 	start := 0
-	for startKey := src.Keys[0]; !equal(dst.Keys[start], startKey); start++ {
+	for startKey := src.Keys[0]; !equal(dst.Keys[start], startKey); {
+		start++
 	}
 	end := start + 1
 	scale := helper.(distanceHelper).Scale
@@ -144,7 +145,8 @@ func (s *distanceStrategy) GenerateScaleColumn(dis []int, maxDis int, keys, comp
 	tempMap := make([]float64, maxDis+1)
 
 	start := 0
-	for startKey := keys[0]; !equal(compactKeys[start], startKey); start++ {
+	for startKey := keys[0]; !equal(compactKeys[start], startKey); {
+		start++
 	}
 	end := start + 1
 

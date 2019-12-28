@@ -66,9 +66,8 @@ func CheckReduceOf(src, part []string) {
 	}
 }
 
-// MakeKeys uses a key map to build a key. If unlimitedEnd is true, MakeKeys need to add a "" to the keys, indicating
-// that the last bucket has an unlimited end.
-func MakeKeys(keySet map[string]struct{}, unlimitedEnd bool) []string {
+// MakeKeys uses a key set to build a new Key-Axis.
+func MakeKeys(keySet map[string]struct{}) []string {
 	keysLen := len(keySet)
 	keys := make([]string, keysLen, keysLen+1)
 	i := 0
@@ -77,10 +76,14 @@ func MakeKeys(keySet map[string]struct{}, unlimitedEnd bool) []string {
 		i++
 	}
 	sort.Strings(keys)
-	if unlimitedEnd {
-		keys = append(keys, "")
-	}
 	return keys
+}
+
+// MakeKeysWithUnlimitedEnd uses a key set to build a new Key-Axis, then add a "" to the keys, indicating that the last
+// bucket has an unlimited end.
+func MakeKeysWithUnlimitedEnd(keySet map[string]struct{}) []string {
+	keys := MakeKeys(keySet)
+	return append(keys, "")
 }
 
 // Max returns the larger of a and b.

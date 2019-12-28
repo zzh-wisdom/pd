@@ -119,7 +119,14 @@ func compact(strategy Strategy, chunks []chunk) (compactChunk chunk, helper inte
 			keySet[key] = struct{}{}
 		}
 	}
-	compactChunk = createZeroChunk(MakeKeys(keySet, unlimitedEnd))
+
+	var compactKeys []string
+	if unlimitedEnd {
+		compactKeys = MakeKeysWithUnlimitedEnd(keySet)
+	} else {
+		compactKeys = MakeKeys(keySet)
+	}
+	compactChunk = createZeroChunk(compactKeys)
 
 	helper = strategy.GenerateHelper(chunks, compactChunk.Keys)
 	for i, c := range chunks {
