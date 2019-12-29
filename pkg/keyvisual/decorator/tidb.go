@@ -16,67 +16,62 @@ package decorator
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
-	"github.com/pingcap/log"
+	"github.com/pingcap/pd/pkg/apiutil/serverapi"
 	"github.com/pingcap/pd/pkg/codec"
 	"github.com/pingcap/pd/server"
-	"go.etcd.io/etcd/clientv3"
-	"go.uber.org/zap"
 )
 
-// AddressCrawler returns the address of tidb
-type AddressCrawler func() []string
-
-const (
-	retryCnt                  = 10
-	etcdGetTimeout            = time.Second
-	tidbServerInformationPath = "/tidb/server/info"
-)
-
-// LocalServerCrawler gets the latest tidb address list from the local pd server.
-var LocalServerCrawler = func(ctx context.Context, svr *server.Server) AddressCrawler {
-	cli := svr.GetClient()
-	return func() []string {
-		for i := 0; i < retryCnt; i++ {
-			var res []string
-			ectx, cancel := context.WithTimeout(ctx, etcdGetTimeout)
-			resp, err := cli.Get(ectx, tidbServerInformationPath, clientv3.WithPrefix())
-			cancel()
-			if err != nil {
-				log.Warn("get key failed", zap.String("key", tidbServerInformationPath), zap.Error(err))
-				time.Sleep(200 * time.Millisecond)
-				continue
-			}
-			for _, kv := range resp.Kvs {
-				v := make(map[string]interface{})
-				err = json.Unmarshal(kv.Value, &v)
-				if err != nil {
-					log.Warn("get key failed", zap.String("key", tidbServerInformationPath), zap.Error(err))
-					continue
-				}
-				res = append(res, v["ip"].(string))
-			}
-			return res
-		}
-		return nil
-	}
+type tableDetail struct {
+	Name    string
+	DB      string
+	ID      int64
+	Indices map[int64]string
 }
 
 type tidbLabelStrategy struct {
-	addrCrawler AddressCrawler
+	tableMap    sync.Map
+	tidbAddress []string
+
+	svr   *server.Server
+	ctx   context.Context
+	group server.APIGroup
 }
 
 // TiDBLabelStrategy implements the LabelStrategy interface. Get Label Information from TiDB.
-func TiDBLabelStrategy(c AddressCrawler) LabelStrategy {
+func TiDBLabelStrategy(ctx context.Context, svr *server.Server, group server.APIGroup, tidbAddress []string) LabelStrategy {
 	return &tidbLabelStrategy{
-		addrCrawler: c,
+		tidbAddress: tidbAddress,
+		svr:         svr,
+		ctx:         ctx,
+		group:       group,
 	}
 }
 
+func (s *tidbLabelStrategy) IsServiceAllowed() bool {
+	if s.svr == nil {
+		return true
+	}
+	return serverapi.IsServiceAllowed(s.svr, s.group)
+}
+
 func (s *tidbLabelStrategy) Background() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			if s.IsServiceAllowed() {
+				s.updateAddress()
+				s.updateMap()
+			}
+		}
+	}
 }
 
 // CrossBorder does not allow cross tables or cross indexes within a table.
@@ -104,6 +99,14 @@ func (s *tidbLabelStrategy) Label(key string) (label LabelKey) {
 	isMeta, TableID := decodeKey.MetaOrTable()
 	if isMeta {
 		label.Labels = append(label.Labels, "meta")
+	} else if v, ok := s.tableMap.Load(TableID); ok {
+		detail := v.(*tableDetail)
+		label.Labels = append(label.Labels, detail.Name)
+		if rowID := decodeKey.RowID(); rowID != 0 {
+			label.Labels = append(label.Labels, fmt.Sprintf("row_%d", rowID))
+		} else if indexID := decodeKey.IndexID(); indexID != 0 {
+			label.Labels = append(label.Labels, detail.Indices[indexID])
+		}
 	} else {
 		label.Labels = append(label.Labels, fmt.Sprintf("table_%d", TableID))
 		if rowID := decodeKey.RowID(); rowID != 0 {
