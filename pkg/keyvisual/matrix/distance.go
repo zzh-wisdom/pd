@@ -97,7 +97,16 @@ func (s *distanceStrategy) Split(dst, src chunk, tag splitTag, axesIndex int, he
 	CheckPartOf(dst.Keys, src.Keys)
 
 	if len(dst.Keys) == len(src.Keys) {
-		copy(dst.Values, src.Values)
+		switch tag {
+		case splitTo:
+			copy(dst.Values, src.Values)
+		case splitAdd:
+			for i, v := range src.Values {
+				dst.Values[i] += v
+			}
+		default:
+			panic("unreachable")
+		}
 		return
 	}
 

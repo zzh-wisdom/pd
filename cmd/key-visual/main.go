@@ -27,10 +27,16 @@ import (
 	"github.com/pingcap/pd/pkg/keyvisual/decorator"
 	"github.com/pingcap/pd/pkg/keyvisual/input"
 	"github.com/pingcap/pd/pkg/logutil"
+	"github.com/pingcap/pd/pkg/ui"
 	"github.com/pingcap/pd/server"
 	"github.com/pkg/errors"
 	"github.com/rs/cors"
 	"go.uber.org/zap"
+)
+
+const (
+	pdAPIPrefix = "/pd/"
+	webPath     = "/web/"
 )
 
 // Config is the key visual server configuration.
@@ -89,7 +95,7 @@ func NewHandler(ctx context.Context, cfg *Config) http.Handler {
 	var in input.StatInput
 	var labelStrategy decorator.LabelStrategy
 
-	if cfg.TiDBAddr != "" {
+	if cfg.TiDBAddr == "" {
 		labelStrategy = decorator.TiDBLabelStrategy(ctx, nil, nil, nil)
 	} else {
 		labelStrategy = decorator.TiDBLabelStrategy(ctx, nil, nil, []string{cfg.TiDBAddr})
@@ -133,7 +139,11 @@ func main() {
 	// cors.Default() setup the middleware with default options being
 	// all origins accepted with simple methods (GET, POST). See
 	// documentation below for more options.
-	handler := cors.Default().Handler(NewHandler(ctx, cfg))
+	apiHandler := cors.Default().Handler(NewHandler(ctx, cfg))
+	webHandler := ui.Handler()
+	handler := http.NewServeMux()
+	handler.Handle(pdAPIPrefix, apiHandler)
+	handler.Handle(webPath, http.StripPrefix(webPath, webHandler))
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -153,6 +163,7 @@ func main() {
 		Handler: handler,
 	}
 
+	log.Info("start key visual server")
 	go svr.ListenAndServe() //nolint:errcheck
 
 	<-ctx.Done()

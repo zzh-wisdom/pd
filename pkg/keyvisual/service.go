@@ -19,6 +19,7 @@ package keyvisual
 import (
 	"compress/gzip"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"math"
 	"net/http"
@@ -146,6 +147,18 @@ func (s *Service) Heatmaps(w http.ResponseWriter, r *http.Request) {
 		zap.String("type", typ),
 	)
 
+	if startKeyBytes, err := hex.DecodeString(startKey); err == nil {
+		startKey = string(startKeyBytes)
+	} else {
+		s.rd.JSON(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	if endKeyBytes, err := hex.DecodeString(endKey); err == nil {
+		endKey = string(endKeyBytes)
+	} else {
+		s.rd.JSON(w, http.StatusBadRequest, "bad request")
+		return
+	}
 	baseTag := region.IntoTag(typ)
 	plane := s.stat.Range(startTime, endTime, startKey, endKey, baseTag)
 	resp := plane.Pixel(s.strategy, maxDisplayY, region.GetDisplayTags(baseTag))
