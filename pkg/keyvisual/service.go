@@ -60,9 +60,9 @@ var (
 	}
 )
 
-type keyvisualService struct {
+// Service is a HTTP handler for heatmaps service.
+type Service struct {
 	*http.ServeMux
-	svr *server.Server
 	ctx context.Context
 	rd  *render.Render
 
@@ -71,20 +71,14 @@ type keyvisualService struct {
 }
 
 // NewKeyvisualService creates a HTTP handler for heatmaps service.
-func NewKeyvisualService(
-	ctx context.Context,
-	svr *server.Server,
-	in input.StatInput,
-	labelStrategy decorator.LabelStrategy,
-) (http.Handler, server.APIGroup) {
+func NewKeyvisualService(ctx context.Context, in input.StatInput, labelStrategy decorator.LabelStrategy) *Service {
 	strategy := matrix.DistanceStrategy(labelStrategy, math.Phi, 15)
 	stat := storage.NewStat(defaultStatConfig, strategy, in.GetStartTime())
 	go labelStrategy.Background()
 	go in.Background(stat)
 
-	k := &keyvisualService{
+	k := &Service{
 		ServeMux: http.NewServeMux(),
-		svr:      svr,
 		ctx:      ctx,
 		rd:       render.New(render.Options{StreamingJSON: true}),
 		stat:     stat,
@@ -92,6 +86,14 @@ func NewKeyvisualService(
 	}
 
 	k.HandleFunc("/pd/apis/keyvisual/v1/heatmaps", k.Heatmaps)
+	return k
+}
+
+// NewHandler creates a KeyvisualService with CoreInput.
+func NewHandler(ctx context.Context, svr *server.Server) (http.Handler, server.APIGroup) {
+	in := input.CoreInput(ctx, svr, defaultRegisterAPIGroupInfo)
+	labelStrategy := decorator.TiDBLabelStrategy(ctx, svr, &defaultRegisterAPIGroupInfo, nil)
+	k := NewKeyvisualService(ctx, in, labelStrategy)
 	handler := negroni.New(
 		serverapi.NewRuntimeServiceValidator(svr, defaultRegisterAPIGroupInfo),
 		serverapi.NewRedirector(svr),
@@ -100,14 +102,8 @@ func NewKeyvisualService(
 	return handler, defaultRegisterAPIGroupInfo
 }
 
-// NewHandler creates a KeyvisualService with CoreInput.
-func NewHandler(ctx context.Context, svr *server.Server) (http.Handler, server.APIGroup) {
-	in := input.CoreInput(ctx, svr, defaultRegisterAPIGroupInfo)
-	labelStrategy := decorator.TiDBLabelStrategy(ctx, svr, defaultRegisterAPIGroupInfo, nil)
-	return NewKeyvisualService(ctx, svr, in, labelStrategy)
-}
-
-func (s *keyvisualService) Heatmaps(w http.ResponseWriter, r *http.Request) {
+// Heatmaps respond to a heatmap request.
+func (s *Service) Heatmaps(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	form := r.URL.Query()
 	startKey := form.Get("startkey")

@@ -38,11 +38,11 @@ type tidbLabelStrategy struct {
 
 	svr   *server.Server
 	ctx   context.Context
-	group server.APIGroup
+	group *server.APIGroup
 }
 
 // TiDBLabelStrategy implements the LabelStrategy interface. Get Label Information from TiDB.
-func TiDBLabelStrategy(ctx context.Context, svr *server.Server, group server.APIGroup, tidbAddress []string) LabelStrategy {
+func TiDBLabelStrategy(ctx context.Context, svr *server.Server, group *server.APIGroup, tidbAddress []string) LabelStrategy {
 	return &tidbLabelStrategy{
 		tidbAddress: tidbAddress,
 		svr:         svr,
@@ -55,7 +55,7 @@ func (s *tidbLabelStrategy) IsServiceAllowed() bool {
 	if s.svr == nil {
 		return true
 	}
-	return serverapi.IsServiceAllowed(s.svr, s.group)
+	return serverapi.IsServiceAllowed(s.svr, *s.group)
 }
 
 func (s *tidbLabelStrategy) Background() {

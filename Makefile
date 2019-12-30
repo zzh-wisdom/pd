@@ -63,6 +63,11 @@ pd-server:
 	CGO_ENABLED=0 go build -gcflags '$(GCFLAGS)' -ldflags '$(LDFLAGS)' -o bin/pd-server cmd/pd-server/main.go
 endif
 
+key-visual: export GO111MODULE=on
+key-visual: retool-setup
+	# @./scripts/build-ui.sh
+	CGO_ENABLED=0 go build -gcflags '$(GCFLAGS)' -ldflags '$(LDFLAGS)' -tags web -o bin/key-visual cmd/key-visual/main.go
+
 # Tools
 pd-ctl: export GO111MODULE=on
 pd-ctl:

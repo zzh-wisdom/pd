@@ -36,6 +36,7 @@ require (
 	github.com/pingcap/sysutil v0.0.0-20191216090214-5f9620d22b3b
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v0.8.0
+	github.com/rs/cors v1.7.0
 	github.com/sirupsen/logrus v1.0.5
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.1
