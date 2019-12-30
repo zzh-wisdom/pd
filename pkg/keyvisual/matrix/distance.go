@@ -204,8 +204,9 @@ func (s *distanceStrategy) GenerateScaleColumn(dis []int, maxDis int, keys, comp
 func updateLeftDis(dis, leftDis []int, keys, compactKeys []string) {
 	CheckPartOf(compactKeys, keys)
 	j := 0
+	keysLen := len(keys)
 	for i := range dis {
-		if equal(compactKeys[i], keys[j]) {
+		if j < keysLen && equal(compactKeys[i], keys[j]) {
 			dis[i] = 0
 			j++
 		} else {
@@ -216,8 +217,9 @@ func updateLeftDis(dis, leftDis []int, keys, compactKeys []string) {
 
 func updateRightDis(dis, rightDis []int, keys, compactKeys []string) {
 	j := 0
+	keysLen := len(keys)
 	for i := range dis {
-		if equal(compactKeys[i], keys[j]) {
+		if j < keysLen && equal(compactKeys[i], keys[j]) {
 			dis[i] = 0
 			j++
 		} else {

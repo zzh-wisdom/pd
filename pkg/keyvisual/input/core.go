@@ -55,12 +55,11 @@ func (input *coreInput) Background(stat *storage.Stat) {
 			return
 		case <-ticker.C:
 			rc := input.svr.GetRaftCluster()
-			if rc == nil || serverapi.IsServiceAllowed(input.svr, input.group) {
-				continue
+			if rc != nil && serverapi.IsServiceAllowed(input.svr, input.group) {
+				regions := clusterScan(input.ctx, rc)
+				endTime := time.Now()
+				stat.Append(regions, endTime)
 			}
-			regions := clusterScan(input.ctx, rc)
-			endTime := time.Now()
-			stat.Append(regions, endTime)
 		}
 	}
 }
