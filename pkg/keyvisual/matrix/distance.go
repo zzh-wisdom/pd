@@ -184,7 +184,7 @@ func (s *distanceStrategy) GenerateScaleColumn(dis []int, maxDis int, keys, comp
 				d := tempDis[i]
 				if d != tempDis[i-1] {
 					level++
-					if level == s.SplitLevel || i >= s.SplitCount {
+					if level >= s.SplitLevel || i >= s.SplitCount {
 						tempMap[d] = 0
 					} else {
 						tempValue = math.Pow(s.SplitRatio, float64(level))
