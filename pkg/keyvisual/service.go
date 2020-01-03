@@ -74,7 +74,7 @@ type Service struct {
 
 // NewKeyvisualService creates a HTTP handler for heatmaps service.
 func NewKeyvisualService(ctx context.Context, in input.StatInput, labelStrategy decorator.LabelStrategy) *Service {
-	strategy := matrix.DistanceStrategy(labelStrategy, math.Phi, 15)
+	strategy := matrix.DistanceStrategy(labelStrategy, math.Phi, 15, 50)
 	stat := storage.NewStat(defaultStatConfig, strategy, in.GetStartTime())
 	go labelStrategy.Background()
 	go in.Background(stat)
@@ -114,7 +114,7 @@ func (s *Service) Heatmaps(w http.ResponseWriter, r *http.Request) {
 	endTimeString := form.Get("endtime")
 	typ := form.Get("type")
 	endTime := time.Now()
-	startTime := endTime.Add(-1200 * time.Minute)
+	startTime := endTime.Add(-360 * time.Minute)
 
 	if startTimeString != "" {
 		tsSec, err := strconv.ParseInt(startTimeString, 10, 64)
