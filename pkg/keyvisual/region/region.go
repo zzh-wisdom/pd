@@ -26,6 +26,8 @@ const (
 	// preThreshold   = 128
 	// preRatioTarget = 512
 	preTarget = 3072
+
+	dirtyValue = 1 << 30
 )
 
 // StatTag is a tag for statistics of different dimensions.
@@ -153,6 +155,7 @@ func CreateStorageAxis(regions []*core.RegionInfo, strategy matrix.Strategy) mat
 	}
 
 	preAxis := matrix.CreateAxis(keys, valuesList)
+	wash(&preAxis)
 	// axis := preAxis.Focus(strategy, preThreshold, len(keys)/preRatioTarget, preTarget)
 	axis := preAxis.Divide(strategy, preTarget)
 	matrix.SaveKeys(axis.Keys)
@@ -184,4 +187,15 @@ func IntoResponseAxis(storageAxis matrix.Axis, baseTag StatTag) matrix.Axis {
 		}
 	}
 	panic("unreachable")
+}
+
+// TODO: Temporary solution, need to trace the source of dirty data.
+func wash(axis *matrix.Axis) {
+	for i, value := range axis.ValuesList[0] {
+		if value >= dirtyValue {
+			for j := range ResponseTags {
+				axis.ValuesList[j][i] = 0
+			}
+		}
+	}
 }
