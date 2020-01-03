@@ -15,15 +15,17 @@
 package region
 
 import (
+	"github.com/pingcap/log"
 	"github.com/pingcap/pd/pkg/keyvisual/matrix"
 	"github.com/pingcap/pd/server/core"
+	"go.uber.org/zap"
 )
 
 // Source data pre processing parameters.
 const (
-	preThreshold   = 128
-	preRatioTarget = 512
-	preTarget      = 1024
+	// preThreshold   = 128
+	// preRatioTarget = 512
+	preTarget = 3072
 )
 
 // StatTag is a tag for statistics of different dimensions.
@@ -151,14 +153,15 @@ func CreateStorageAxis(regions []*core.RegionInfo, strategy matrix.Strategy) mat
 	}
 
 	preAxis := matrix.CreateAxis(keys, valuesList)
-	focusAxis := preAxis.Focus(strategy, preThreshold, len(keys)/preRatioTarget, preTarget)
-	matrix.SaveKeys(focusAxis.Keys)
+	// axis := preAxis.Focus(strategy, preThreshold, len(keys)/preRatioTarget, preTarget)
+	axis := preAxis.Divide(strategy, preTarget)
+	matrix.SaveKeys(axis.Keys)
 
 	// ResponseTags -> StorageTags
 	var storageValuesList [][]uint64
-	storageValuesList = append(storageValuesList, focusAxis.ValuesList[1:]...)
-	// log.Info("New StorageAxis", zap.Int("region length", len(regions)), zap.Int("focus keys length", len(focusAxis.Keys)))
-	return matrix.CreateAxis(focusAxis.Keys, storageValuesList)
+	storageValuesList = append(storageValuesList, axis.ValuesList[1:]...)
+	log.Info("New StorageAxis", zap.Int("region length", len(regions)), zap.Int("focus keys length", len(axis.Keys)))
+	return matrix.CreateAxis(axis.Keys, storageValuesList)
 }
 
 // IntoResponseAxis converts StorageAxis to ResponseAxis.

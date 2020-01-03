@@ -133,6 +133,25 @@ func (axis *Axis) Focus(strategy Strategy, threshold uint64, ratio int, target i
 	return CreateAxis(newChunk.Keys, newValuesList)
 }
 
+// Divide uses the base column as the chunk for the Divide operation to obtain the partitioning scheme, and uses this to
+// reduce other columns.
+func (axis *Axis) Divide(strategy Strategy, target int) Axis {
+	if target >= len(axis.Keys)-1 {
+		return *axis
+	}
+
+	baseChunk := createChunk(axis.Keys, axis.ValuesList[0])
+	newChunk := baseChunk.Divide(strategy, target)
+	valuesListLen := len(axis.ValuesList)
+	newValuesList := make([][]uint64, valuesListLen)
+	newValuesList[0] = newChunk.Values
+	for i := 1; i < valuesListLen; i++ {
+		baseChunk.SetValues(axis.ValuesList[i])
+		newValuesList[i] = baseChunk.Reduce(newChunk.Keys).Values
+	}
+	return CreateAxis(newChunk.Keys, newValuesList)
+}
+
 type chunk struct {
 	// Keys and ValuesList[i] from Axis
 	Keys   []string
@@ -260,9 +279,9 @@ func (c *chunk) Focus(strategy Strategy, threshold uint64, ratio int, target int
 }
 
 // Divide uses binary search to find a suitable threshold, which can reduce the number of buckets of Axis to near the target.
-func (c *chunk) Divide(strategy Strategy, target int) []string {
+func (c *chunk) Divide(strategy Strategy, target int) chunk {
 	if target >= len(c.Values) {
-		return c.Keys
+		return *c
 	}
 	// get upperThreshold
 	var upperThreshold uint64 = 1
@@ -284,5 +303,5 @@ func (c *chunk) Divide(strategy Strategy, target int) []string {
 	threshold := lowerThreshold
 	focusRows := c.GetFocusRows(threshold)
 	ratio := len(c.Values)/(target-focusRows) + 1
-	return c.Focus(strategy, threshold, ratio, target).Keys
+	return c.Focus(strategy, threshold, ratio, target)
 }
