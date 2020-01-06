@@ -22,6 +22,7 @@ import (
 
 // Matrix is the front end displays the required data.
 type Matrix struct {
+	Keys     []string              `json:"-"`
 	DataMap  map[string][][]uint64 `json:"data"`
 	KeyAxis  []decorator.LabelKey  `json:"keyAxis"`
 	TimeAxis []int64               `json:"timeAxis"`
@@ -41,8 +42,24 @@ func CreateMatrix(strategy Strategy, times []time.Time, keys []string, valuesLis
 		timeAxis[i] = t.Unix()
 	}
 	return Matrix{
+		Keys:     keys,
 		DataMap:  dataMap,
 		KeyAxis:  keyAxis,
 		TimeAxis: timeAxis,
+	}
+}
+
+// Range returns a sub Matrix with specified range.
+func (mx *Matrix) Range(startKey, endKey string) {
+	start, end, ok := KeysRange(mx.Keys, startKey, endKey)
+	if !ok {
+		panic("unreachable")
+	}
+	mx.Keys = mx.Keys[start:end]
+	mx.KeyAxis = mx.KeyAxis[start:end]
+	for _, data := range mx.DataMap {
+		for i, axis := range data {
+			data[i] = axis[start : end-1]
+		}
 	}
 }

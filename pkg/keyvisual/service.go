@@ -163,6 +163,7 @@ func (s *Service) Heatmaps(w http.ResponseWriter, r *http.Request) {
 	baseTag := region.IntoTag(typ)
 	plane := s.stat.Range(startTime, endTime, startKey, endKey, baseTag)
 	resp := plane.Pixel(s.strategy, maxDisplayY, region.GetDisplayTags(baseTag))
+	resp.Range(startKey, endKey)
 	// TODO: An expedient to reduce data transmission, which needs to be deleted later.
 	resp.DataMap = map[string][][]uint64{
 		typ: resp.DataMap[typ],
