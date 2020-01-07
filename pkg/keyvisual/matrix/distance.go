@@ -31,19 +31,27 @@ type distanceHelper struct {
 
 type distanceStrategy struct {
 	decorator.LabelStrategy
+
 	SplitRatio float64
 	SplitLevel int
 	SplitCount int
+
+	SplitRatioPow []float64
 }
 
 // DistanceStrategy adopts the strategy that the closer the split time is to the current time, the more traffic is
 // allocated, when buckets are split.
 func DistanceStrategy(label decorator.LabelStrategy, ratio float64, level int, count int) Strategy {
+	pow := make([]float64, level)
+	for i := range pow {
+		pow[i] = math.Pow(ratio, float64(i))
+	}
 	return &distanceStrategy{
+		LabelStrategy: label,
 		SplitRatio:    1.0 / ratio,
 		SplitLevel:    level,
 		SplitCount:    count,
-		LabelStrategy: label,
+		SplitRatioPow: pow,
 	}
 }
 
@@ -187,7 +195,8 @@ func (s *distanceStrategy) GenerateScaleColumn(dis []int, maxDis int, keys, comp
 					if level >= s.SplitLevel || i >= s.SplitCount {
 						tempMap[d] = 0
 					} else {
-						tempValue = math.Pow(s.SplitRatio, float64(level))
+						// tempValue = math.Pow(s.SplitRatio, float64(level))
+						tempValue = s.SplitRatioPow[level]
 						tempMap[d] = tempValue
 					}
 				}
