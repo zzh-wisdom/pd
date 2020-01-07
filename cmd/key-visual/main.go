@@ -17,6 +17,7 @@ import (
 	"context"
 	"flag"
 	"net/http"
+	_ "net/http/pprof" //nolint:gosec
 	"os"
 	"os/signal"
 	"syscall"
@@ -58,7 +59,7 @@ func NewConfig() *Config {
 	}
 	fs.BoolVar(&cfg.Version, "V", false, "print version information and exit")
 	fs.BoolVar(&cfg.Version, "version", false, "print version information and exit")
-	fs.StringVar(&cfg.Addr, "addr", "127.0.0.1:23790", "address for listening")
+	fs.StringVar(&cfg.Addr, "addr", "0.0.0.0:32619", "address for listening")
 	fs.StringVar(&cfg.PDAddr, "pd", "", "address for pd server in api mode")
 	fs.StringVar(&cfg.TiDBAddr, "tidb", "", "address for tidb server")
 	fs.Int64Var(&cfg.FileStartTime, "file-start", 0, "start time for file range in file mode")
@@ -141,9 +142,8 @@ func main() {
 	// documentation below for more options.
 	apiHandler := cors.Default().Handler(NewHandler(ctx, cfg))
 	webHandler := ui.Handler()
-	handler := http.NewServeMux()
-	handler.Handle(pdAPIPrefix, apiHandler)
-	handler.Handle(webPath, http.StripPrefix(webPath, webHandler))
+	http.Handle(pdAPIPrefix, apiHandler)
+	http.Handle(webPath, http.StripPrefix(webPath, webHandler))
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -158,17 +158,17 @@ func main() {
 		cancel()
 	}()
 
-	svr := &http.Server{
+	srv := &http.Server{
 		Addr:    cfg.Addr,
-		Handler: handler,
+		Handler: http.DefaultServeMux,
 	}
 
 	log.Info("start key visual server")
-	go svr.ListenAndServe() //nolint:errcheck
+	go srv.ListenAndServe() //nolint:errcheck
 
 	<-ctx.Done()
 	log.Info("Got signal to exit", zap.String("signal", sig.String()))
-	if err := svr.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(ctx); err != nil {
 		log.Error("Stop server", zap.Error(err))
 	}
 
