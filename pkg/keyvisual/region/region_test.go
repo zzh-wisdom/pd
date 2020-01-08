@@ -12,3 +12,17 @@
 // limitations under the License.
 
 package region
+
+import (
+	"testing"
+
+	. "github.com/pingcap/check"
+)
+
+func TestRegion(t *testing.T) {
+	TestingT(t)
+}
+
+var _ = Suite(&testRegionSuite{})
+
+type testRegionSuite struct{}

@@ -14,8 +14,20 @@
 package decorator
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"reflect"
+	"time"
 	"unsafe"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+)
+
+const (
+	retryCnt       = 10
+	etcdGetTimeout = time.Second
 )
 
 // Bytes converts a string into a byte slice. Need to make sure that the byte slice is not modified.
@@ -29,4 +41,16 @@ func Bytes(s string) (b []byte) {
 	pbytes.Len = pstring.Len
 	pbytes.Cap = pstring.Len
 	return
+}
+
+func request(addr string, uri string, v interface{}) error {
+	url := fmt.Sprintf("http://%s/%s", addr, uri)
+	resp, err := http.Get(url) //nolint:gosec
+	if err != nil {
+		log.Warn("request failed", zap.String("url", url))
+		return err
+	}
+	defer resp.Body.Close()
+	decoder := json.NewDecoder(resp.Body)
+	return decoder.Decode(v)
 }

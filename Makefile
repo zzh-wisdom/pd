@@ -8,6 +8,7 @@ BASIC_TEST_PKGS := $(filter-out $(INTEGRATION_TEST_PKGS),$(TEST_PKGS))
 
 PACKAGES := go list ./...
 PACKAGE_DIRECTORIES := $(PACKAGES) | sed 's|github.com/pingcap/pd/||'
+IGNORE_FILES := grep -v 'pkg/ui/dist/bindata.go'
 GOCHECKER := awk '{ print } END { if (NR > 0) { exit 1 } }'
 RETOOL := ./scripts/retool
 OVERALLS := overalls
@@ -122,7 +123,7 @@ check-plugin:
 static: export GO111MODULE=on
 static:
 	@ # Not running vet and fmt through metalinter becauase it ends up looking at vendor
-	gofmt -s -l $$($(PACKAGE_DIRECTORIES)) 2>&1 | $(GOCHECKER)
+	gofmt -s -l $$($(PACKAGE_DIRECTORIES)) 2>&1 | $(IGNORE_FILES) | $(GOCHECKER)
 
 	CGO_ENABLED=0 ./scripts/retool do golangci-lint run --no-config --enable misspell --disable errcheck --deadline 120s $$($(PACKAGE_DIRECTORIES))
 

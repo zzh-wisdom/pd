@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/pingcap/log"
@@ -26,8 +25,6 @@ import (
 )
 
 const (
-	retryCnt                  = 10
-	etcdGetTimeout            = time.Second
 	tidbServerInformationPath = "/tidb/server/info"
 )
 
@@ -126,16 +123,4 @@ func (s *tidbLabelStrategy) updateMap() {
 			s.tableMap.Store(table.ID, detail)
 		}
 	}
-}
-
-func request(addr string, uri string, v interface{}) error {
-	url := fmt.Sprintf("http://%s/%s", addr, uri)
-	resp, err := http.Get(url) //nolint:gosec
-	if err != nil {
-		log.Warn("request failed", zap.String("url", url))
-		return err
-	}
-	defer resp.Body.Close()
-	decoder := json.NewDecoder(resp.Body)
-	return decoder.Decode(v)
 }

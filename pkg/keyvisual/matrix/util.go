@@ -87,7 +87,7 @@ func MakeKeysWithUnlimitedEnd(keySet map[string]struct{}) []string {
 }
 
 // KeysRange finds a range that intersects [startKey, endKey) in keys.
-func KeysRange(keys []string, startKey string, endKey string) (int, int, bool) {
+func KeysRange(keys []string, startKey string, endKey string) (start, end int, ok bool) {
 	if endKey != "" && startKey >= endKey {
 		panic("StartKey must be less than EndKey")
 	}
@@ -108,7 +108,7 @@ func KeysRange(keys []string, startKey string, endKey string) (int, int, bool) {
 	}
 
 	// start index (contain)
-	start := sort.Search(sortedKeysLen, func(i int) bool {
+	start = sort.Search(sortedKeysLen, func(i int) bool {
 		return keys[i] > startKey
 	})
 	if start > 0 {
@@ -116,17 +116,17 @@ func KeysRange(keys []string, startKey string, endKey string) (int, int, bool) {
 	}
 
 	// end index (contain)
-	end := keysLen - 1
+	end = keysLen
 	if endKey != "" {
 		end = sort.Search(sortedKeysLen, func(i int) bool {
 			return keys[i] >= endKey
 		})
-		if end == keysLen {
-			end--
+		if end < keysLen {
+			end++
 		}
 	}
 
-	return start, end + 1, true
+	return start, end, true
 }
 
 // Max returns the larger of a and b.

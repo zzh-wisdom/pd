@@ -12,3 +12,11 @@
 // limitations under the License.
 
 package matrix
+
+import (
+	. "github.com/pingcap/check"
+)
+
+var _ = Suite(&testKeySuite{})
+
+type testKeySuite struct{}
