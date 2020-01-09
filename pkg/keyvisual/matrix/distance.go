@@ -48,7 +48,7 @@ func DistanceStrategy(label decorator.LabelStrategy, ratio float64, level int, c
 	}
 	return &distanceStrategy{
 		LabelStrategy: label,
-		SplitRatio:    1.0 / ratio,
+		SplitRatio:    ratio,
 		SplitLevel:    level,
 		SplitCount:    count,
 		SplitRatioPow: pow,
