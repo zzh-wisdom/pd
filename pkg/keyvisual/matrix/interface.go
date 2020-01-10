@@ -55,3 +55,6 @@ func (s NaiveLabelStrategy) Label(key string) decorator.LabelKey {
 		Labels: []string{str},
 	}
 }
+
+// Background do nothing.
+func (s NaiveLabelStrategy) Background() {}

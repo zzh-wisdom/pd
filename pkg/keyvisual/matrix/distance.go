@@ -81,26 +81,9 @@ func (s *distanceStrategy) GenerateHelper(chunks []chunk, compactKeys []string) 
 		updateRightDis(dis[i], dis[i+1], chunks[i].Keys, compactKeys)
 	}
 
-	// multi-threaded calculate scale matrix.
-	// FIXME: Limit the number of concurrency
-	var wg sync.WaitGroup
-	scale := make([][]float64, axesLen)
-	generateFunc := func(i int) {
-		// The maximum distance between the StartKey and EndKey of a bucket
-		// is considered the bucket distance.
-		var maxDis int
-		dis[i], maxDis = toBucketDis(dis[i])
-		// The longer the distance, the lower the scale.
-		scale[i] = s.GenerateScaleColumn(dis[i], maxDis, chunks[i].Keys, compactKeys)
-		wg.Done()
+	return distanceHelper{
+		Scale: s.GenerateScale(chunks, compactKeys, dis),
 	}
-	wg.Add(axesLen)
-	for i := 0; i < axesLen; i++ {
-		go generateFunc(i)
-	}
-	wg.Wait()
-
-	return distanceHelper{Scale: scale}
 }
 
 func (s *distanceStrategy) Split(dst, src chunk, tag splitTag, axesIndex int, helper interface{}) {
@@ -153,6 +136,29 @@ func (s *distanceStrategy) Split(dst, src chunk, tag splitTag, axesIndex int, he
 	default:
 		panic("unreachable")
 	}
+}
+
+// multi-threaded calculate scale matrix.
+// FIXME: Limit the number of concurrency
+func (s *distanceStrategy) GenerateScale(chunks []chunk, compactKeys []string, dis [][]int) [][]float64 {
+	var wg sync.WaitGroup
+	axesLen := len(chunks)
+	scale := make([][]float64, axesLen)
+	generateFunc := func(i int) {
+		// The maximum distance between the StartKey and EndKey of a bucket
+		// is considered the bucket distance.
+		var maxDis int
+		dis[i], maxDis = toBucketDis(dis[i])
+		// The longer the distance, the lower the scale.
+		scale[i] = s.GenerateScaleColumn(dis[i], maxDis, chunks[i].Keys, compactKeys)
+		wg.Done()
+	}
+	wg.Add(axesLen)
+	for i := 0; i < axesLen; i++ {
+		go generateFunc(i)
+	}
+	wg.Wait()
+	return scale
 }
 
 func (s *distanceStrategy) GenerateScaleColumn(dis []int, maxDis int, keys, compactKeys []string) (scale []float64) {
