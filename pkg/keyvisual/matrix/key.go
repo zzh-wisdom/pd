@@ -25,6 +25,7 @@ var keyMap sync.Map
 // FIXME: GC useless keys
 func SaveKeys(keys []string) {
 	for i, key := range keys {
+		//消除重复的string
 		uniqueKey, _ := keyMap.LoadOrStore(key, key)
 		keys[i] = uniqueKey.(string)
 	}

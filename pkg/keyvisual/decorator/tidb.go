@@ -80,11 +80,14 @@ func (s *tidbLabelStrategy) CrossBorder(startKey, endKey string) bool {
 	startIsMeta, startTableID := startBytes.MetaOrTable()
 	endIsMeta, endTableID := endBytes.MetaOrTable()
 	if startIsMeta || endIsMeta {
+		// Meta应该是比较特殊的一种key，按照代码逻辑，Meta都在同一个表中，所以不会越界
 		return startIsMeta != endIsMeta
 	}
+	// 判断是否跨表
 	if startTableID != endTableID {
 		return true
 	}
+	// 判断是否跨索引表
 	startIndex := startBytes.IndexID()
 	endIndex := endBytes.IndexID()
 	return startIndex != endIndex
@@ -102,12 +105,14 @@ func (s *tidbLabelStrategy) Label(key string) (label LabelKey) {
 	} else if v, ok := s.tableMap.Load(TableID); ok {
 		detail := v.(*tableDetail)
 		label.Labels = append(label.Labels, detail.Name)
+		// lable存储的是表的名字 加上 数据行号或者索引号
 		if rowID := decodeKey.RowID(); rowID != 0 {
 			label.Labels = append(label.Labels, fmt.Sprintf("row_%d", rowID))
 		} else if indexID := decodeKey.IndexID(); indexID != 0 {
 			label.Labels = append(label.Labels, detail.Indices[indexID])
 		}
 	} else {
+		// 没找到对应tidb的表的，只能用表的编号了
 		label.Labels = append(label.Labels, fmt.Sprintf("table_%d", TableID))
 		if rowID := decodeKey.RowID(); rowID != 0 {
 			label.Labels = append(label.Labels, fmt.Sprintf("row_%d", rowID))

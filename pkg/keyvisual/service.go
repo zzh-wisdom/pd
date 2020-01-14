@@ -68,15 +68,19 @@ type Service struct {
 	ctx context.Context
 	rd  *render.Render
 
-	stat     *storage.Stat
-	strategy matrix.Strategy
+	stat     *storage.Stat   //分层存放数据
+	strategy matrix.Strategy //生成矩阵的策略
 }
 
 // NewKeyvisualService creates a HTTP handler for heatmaps service.
 func NewKeyvisualService(ctx context.Context, in input.StatInput, labelStrategy decorator.LabelStrategy) *Service {
+	// 生成一个策略，这个策略只是合并的，不包括压缩的
 	strategy := matrix.DistanceStrategy(labelStrategy, math.Phi, 15, 50)
+	// 生成一个分层队列
 	stat := storage.NewStat(defaultStatConfig, strategy, in.GetStartTime())
+	// 开启线程不断维护label信息，从tidb中
 	go labelStrategy.Background()
+	// 从pd中不断获取region信息
 	go in.Background(stat)
 
 	k := &Service{
@@ -117,6 +121,7 @@ func (s *Service) Heatmaps(w http.ResponseWriter, r *http.Request) {
 	startTime := endTime.Add(-360 * time.Minute)
 
 	if startTimeString != "" {
+		// ##需学习
 		tsSec, err := strconv.ParseInt(startTimeString, 10, 64)
 		if err != nil {
 			log.Error("parse ts failed", zap.Error(err))
@@ -147,7 +152,7 @@ func (s *Service) Heatmaps(w http.ResponseWriter, r *http.Request) {
 		zap.String("end-key", endKey),
 		zap.String("type", typ),
 	)
-
+	// ##hex需学习
 	if startKeyBytes, err := hex.DecodeString(startKey); err == nil {
 		startKey = string(startKeyBytes)
 	} else {
@@ -182,6 +187,7 @@ func (s *Service) Heatmaps(w http.ResponseWriter, r *http.Request) {
 	} else {
 		encoder = json.NewEncoder(w)
 	}
+
 	if err := encoder.Encode(resp); err != nil {
 		log.Warn("json encode or write error", zap.Error(err))
 	}

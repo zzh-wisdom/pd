@@ -61,6 +61,7 @@ type tableInfo struct {
 	} `json:"index_info"`
 }
 
+// 这个函数就是不断更新（替换的形式）tidb的地址，
 func (s *tidbLabelStrategy) updateAddress() {
 	if s.svr == nil {
 		return
@@ -69,6 +70,7 @@ func (s *tidbLabelStrategy) updateAddress() {
 	var info serverInfo
 	for i := 0; i < retryCnt; i++ {
 		var tidbAddress []string
+		// 这里不太懂啊，慢慢学吧
 		ectx, cancel := context.WithTimeout(s.ctx, etcdGetTimeout)
 		resp, err := cli.Get(ectx, tidbServerInformationPath, clientv3.WithPrefix())
 		cancel()
@@ -95,6 +97,7 @@ func (s *tidbLabelStrategy) updateMap() {
 	var dbInfos []*dbInfo
 	var tidbAddr string
 	for _, addr := range s.tidbAddress {
+		// 只要有一个tidb回应就可以了
 		if err := request(addr, "schema", &dbInfos); err == nil {
 			tidbAddr = addr
 			break

@@ -82,7 +82,7 @@ func clusterScan(ctx context.Context, rc *cluster.RaftCluster) []*core.RegionInf
 		if length == 0 {
 			break
 		}
-
+		// 切片会自动扩容
 		regions = append(regions, rs...)
 
 		startKey = rs[length-1].GetEndKey()

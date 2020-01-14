@@ -62,11 +62,13 @@ func (s *distanceStrategy) GenerateHelper(chunks []chunk, compactKeys []string) 
 	MemsetInt(virtualColumn, axesLen)
 
 	// calculate left distance
+	// 这样是假定最左边的轴chunks[0]离compactKeys最近吗？
 	updateLeftDis(dis[0], virtualColumn, chunks[0].Keys, compactKeys)
 	for i := 1; i < axesLen; i++ {
 		updateLeftDis(dis[i], dis[i-1], chunks[i].Keys, compactKeys)
 	}
 	// calculate the nearest distance on both sides
+	// 这里应该是再假定最右边的轴chunks[end]离compactKeys最近吗，但计算距离时是取最小值
 	end := axesLen - 1
 	updateRightDis(dis[end], virtualColumn, chunks[end].Keys, compactKeys)
 	for i := end - 1; i >= 0; i-- {
@@ -167,6 +169,7 @@ func (s *distanceStrategy) GenerateScaleColumn(dis []int, maxDis int, keys, comp
 		}
 
 		if start+1 == end {
+			// 改bucket只分拆分成一份
 			// Optimize calculation when splitting into 1
 			scale[start] = 1.0
 			start++
@@ -184,9 +187,12 @@ func (s *distanceStrategy) GenerateScaleColumn(dis []int, maxDis int, keys, comp
 				d := tempDis[i]
 				if d != tempDis[i-1] {
 					level++
+					// 这个啥意思哦？？？
+					// 应该是满足这个条件的，直接不分配
 					if level >= s.SplitLevel || i >= s.SplitCount {
 						tempMap[d] = 0
 					} else {
+						// 直接根据level分配，与dis的数值并无关系了
 						tempValue = math.Pow(s.SplitRatio, float64(level))
 						tempMap[d] = tempValue
 					}
@@ -195,6 +201,7 @@ func (s *distanceStrategy) GenerateScaleColumn(dis []int, maxDis int, keys, comp
 			}
 			// Calculate scale
 			for ; start < end; start++ {
+				// 真正计算所占的百分比
 				scale[start] = tempMap[dis[start]] / tempSum
 			}
 		}
@@ -203,6 +210,8 @@ func (s *distanceStrategy) GenerateScaleColumn(dis []int, maxDis int, keys, comp
 	return
 }
 
+// dis的长度等于compactKeys的长度
+// compactKeys应该是更细的轴
 func updateLeftDis(dis, leftDis []int, keys, compactKeys []string) {
 	CheckPartOf(compactKeys, keys)
 	j := 0

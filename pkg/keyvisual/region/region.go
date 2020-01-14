@@ -162,6 +162,7 @@ func CreateStorageAxis(regions []*core.RegionInfo, strategy matrix.Strategy) mat
 
 	// ResponseTags -> StorageTags
 	var storageValuesList [][]uint64
+	// 把负载那一列的数据去掉
 	storageValuesList = append(storageValuesList, axis.ValuesList[1:]...)
 	log.Info("New StorageAxis", zap.Int("region length", len(regions)), zap.Int("focus keys length", len(axis.Keys)))
 	return matrix.CreateAxis(axis.Keys, storageValuesList)
@@ -192,6 +193,7 @@ func IntoResponseAxis(storageAxis matrix.Axis, baseTag StatTag) matrix.Axis {
 // TODO: Temporary solution, need to trace the source of dirty data.
 func wash(axis *matrix.Axis) {
 	for i, value := range axis.ValuesList[0] {
+		// 负载过高，直接置为0忽略
 		if value >= dirtyValue {
 			for j := range ResponseTags {
 				axis.ValuesList[j][i] = 0

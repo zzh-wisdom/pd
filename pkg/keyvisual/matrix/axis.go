@@ -236,8 +236,10 @@ func (c *chunk) GetFocusRows(threshold uint64) (count int) {
 
 	for i, value := range c.Values {
 		if value >= threshold || bucketSum >= threshold {
+			// 这里是处理i之前的，不包括i
 			generateBucket(i)
 		}
+		// 延迟半拍吧
 		bucketSum += value
 	}
 	generateBucket(len(c.Values))
