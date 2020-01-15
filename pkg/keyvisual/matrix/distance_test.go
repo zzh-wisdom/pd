@@ -15,6 +15,7 @@ package matrix
 
 import (
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -73,7 +74,8 @@ func BenchmarkGenerateScale(b *testing.B) {
 	SaveKeys(compactKeys)
 	SaveKeys(data.Keys)
 
-	strategy := DistanceStrategy(NaiveLabelStrategy{}, 1.0/math.Phi, 15, 50).(*distanceStrategy)
+	ctx, cancel := context.WithCancel(context.TODO())
+	strategy := DistanceStrategy(ctx, NaiveLabelStrategy{}, 1.0/math.Phi, 15, 50).(*distanceStrategy)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
@@ -81,4 +83,6 @@ func BenchmarkGenerateScale(b *testing.B) {
 		b.StartTimer()
 		_ = strategy.GenerateScale(chunks, compactKeys, dis)
 	}
+	b.StopTimer()
+	cancel()
 }

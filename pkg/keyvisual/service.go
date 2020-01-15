@@ -74,7 +74,7 @@ type Service struct {
 
 // NewKeyvisualService creates a HTTP handler for heatmaps service.
 func NewKeyvisualService(ctx context.Context, in input.StatInput, labelStrategy decorator.LabelStrategy) *Service {
-	strategy := matrix.DistanceStrategy(labelStrategy, 1.0/math.Phi, 15, 50)
+	strategy := matrix.DistanceStrategy(ctx, labelStrategy, 1.0/math.Phi, 15, 50)
 	stat := storage.NewStat(defaultStatConfig, strategy, in.GetStartTime())
 	go labelStrategy.Background()
 	go in.Background(stat)
