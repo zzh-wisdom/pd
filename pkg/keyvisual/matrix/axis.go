@@ -49,7 +49,6 @@ func CreateEmptyAxis(startKey, endKey string, valuesListLen int) Axis {
 	for i := range valuesList {
 		valuesList[i] = values
 	}
-	SaveKeys(keys)
 	return CreateAxis(keys, valuesList)
 }
 

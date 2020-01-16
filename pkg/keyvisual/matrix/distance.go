@@ -16,6 +16,7 @@ package matrix
 import (
 	"context"
 	"math"
+	"runtime"
 	"sort"
 	"sync"
 
@@ -149,7 +150,7 @@ func (s *distanceStrategy) Split(dst, src chunk, tag splitTag, axesIndex int, he
 }
 
 // multi-threaded calculate scale matrix.
-const workerCount = 16
+var workerCount = runtime.NumCPU()
 
 type scaleTask struct {
 	*sync.WaitGroup

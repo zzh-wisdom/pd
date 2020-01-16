@@ -15,6 +15,7 @@
 package storage
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"time"
@@ -68,6 +69,7 @@ func newLayerStat(conf LayerConfig, strategy matrix.Strategy, startTime time.Tim
 func (s *layerStat) Reduce() {
 	if s.Ratio == 0 || s.Next == nil {
 		s.StartTime = s.RingTimes[s.Head]
+		s.RingAxes[s.Head] = matrix.Axis{}
 		s.Head = (s.Head + 1) % s.Len
 		return
 	}
@@ -80,6 +82,7 @@ func (s *layerStat) Reduce() {
 		s.StartTime = s.RingTimes[s.Head]
 		times = append(times, s.StartTime)
 		axes = append(axes, s.RingAxes[s.Head])
+		s.RingAxes[s.Head] = matrix.Axis{}
 		s.Head = (s.Head + 1) % s.Len
 	}
 
@@ -160,13 +163,15 @@ type StatConfig struct {
 
 // Stat is composed of multiple layerStats.
 type Stat struct {
-	mutex    sync.RWMutex
-	layers   []*layerStat
+	mutex  sync.RWMutex
+	layers []*layerStat
+
+	keyMap   matrix.KeyMap
 	strategy matrix.Strategy
 }
 
 // NewStat generates a Stat based on the configuration.
-func NewStat(conf StatConfig, strategy matrix.Strategy, startTime time.Time) *Stat {
+func NewStat(ctx context.Context, conf StatConfig, strategy matrix.Strategy, startTime time.Time) *Stat {
 	layers := make([]*layerStat, len(conf.LayersConfig))
 	for i, c := range conf.LayersConfig {
 		layers[i] = newLayerStat(c, strategy, startTime)
@@ -174,9 +179,41 @@ func NewStat(conf StatConfig, strategy matrix.Strategy, startTime time.Time) *St
 			layers[i-1].Next = layers[i]
 		}
 	}
-	return &Stat{
+	s := &Stat{
 		layers:   layers,
 		strategy: strategy,
+	}
+	go s.rebuildRegularly(ctx)
+	return s
+}
+
+func (s *Stat) rebuildKeyMap() {
+	s.keyMap.Lock()
+	defer s.keyMap.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Lock()
+
+	s.keyMap.Map = sync.Map{}
+
+	for _, layer := range s.layers {
+		for _, axis := range layer.RingAxes {
+			if len(axis.Keys) > 0 {
+				s.keyMap.SaveKeys(axis.Keys)
+			}
+		}
+	}
+}
+
+func (s *Stat) rebuildRegularly(ctx context.Context) {
+	ticker := time.NewTicker(time.Hour * 24)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.rebuildKeyMap()
+		}
 	}
 }
 
@@ -186,6 +223,11 @@ func (s *Stat) Append(regions []*core.RegionInfo, endTime time.Time) {
 		return
 	}
 	axis := region.CreateStorageAxis(regions, s.strategy)
+
+	s.keyMap.RLock()
+	defer s.keyMap.RUnlock()
+	s.keyMap.SaveKeys(axis.Keys)
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.layers[0].Append(axis, endTime)
@@ -199,6 +241,11 @@ func (s *Stat) rangeRoot(startTime, endTime time.Time) ([]time.Time, []matrix.Ax
 
 // Range returns a sub Plane with specified range.
 func (s *Stat) Range(startTime, endTime time.Time, startKey, endKey string, baseTag region.StatTag) matrix.Plane {
+	s.keyMap.RLock()
+	defer s.keyMap.RUnlock()
+	s.keyMap.SaveKey(&startKey)
+	s.keyMap.SaveKey(&endKey)
+
 	times, axes := s.rangeRoot(startTime, endTime)
 
 	if len(times) <= 1 {
