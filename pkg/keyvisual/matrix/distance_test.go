@@ -71,8 +71,10 @@ func BenchmarkGenerateScale(b *testing.B) {
 		compactKeys = append(compactKeys, fmt.Sprintf("t%05d", i))
 	}
 	compactKeys = append(compactKeys, "")
-	SaveKeys(compactKeys)
-	SaveKeys(data.Keys)
+
+	keymap := KeyMap{}
+	keymap.SaveKeys(compactKeys)
+	keymap.SaveKeys(data.Keys)
 
 	ctx, cancel := context.WithCancel(context.TODO())
 	strategy := DistanceStrategy(ctx, NaiveLabelStrategy{}, 1.0/math.Phi, 15, 50).(*distanceStrategy)
