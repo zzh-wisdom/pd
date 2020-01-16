@@ -191,7 +191,7 @@ func (s *Stat) rebuildKeyMap() {
 	s.keyMap.Lock()
 	defer s.keyMap.Unlock()
 	s.mutex.Lock()
-	defer s.mutex.Lock()
+	defer s.mutex.Unlock()
 
 	s.keyMap.Map = sync.Map{}
 
