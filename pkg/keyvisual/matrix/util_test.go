@@ -15,12 +15,7 @@ package matrix
 
 import (
 	. "github.com/pingcap/check"
-	"testing"
 )
-
-func Test(t *testing.T) {
-	TestingT(t)
-}
 
 var _ = Suite(&testUtilSuite{})
 

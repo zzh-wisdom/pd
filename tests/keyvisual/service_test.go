@@ -57,8 +57,8 @@ func (s *serverTestSuite) TearDownSuite(c *C) {
 
 func (s *serverTestSuite) TestLeader(c *C) {
 	cluster, err := tests.NewTestCluster(s.ctx, 3)
-	defer cluster.Destroy()
 	c.Assert(err, IsNil)
+	defer cluster.Destroy()
 
 	err = cluster.RunInitialServers()
 	c.Assert(err, IsNil)
@@ -75,7 +75,7 @@ func (s *serverTestSuite) TestLeader(c *C) {
 	c.Assert(followerSvr, NotNil)
 
 	checkReq := func(url string, target string) {
-		resp, err := http.Get(url)
+		resp, err := http.Get(url) //nolint:gosec
 		c.Assert(err, IsNil)
 		c.Assert(len(resp.Header.Get("PD-Follower-handle")), Equals, 0)
 		bodyBytes, err := ioutil.ReadAll(resp.Body)
@@ -83,6 +83,17 @@ func (s *serverTestSuite) TestLeader(c *C) {
 		c.Assert(err, IsNil)
 		c.Assert(string(bodyBytes), Equals, target)
 	}
+
+	checkReqCode := func(url string, target int) {
+		resp, err := http.Get(url) //nolint:gosec
+		c.Assert(err, IsNil)
+		c.Assert(len(resp.Header.Get("PD-Follower-handle")), Equals, 0)
+		_, err = ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		c.Assert(err, IsNil)
+		c.Assert(resp.StatusCode, Equals, target)
+	}
+
 	leader := cluster.GetServer(leaderName)
 	leaderURL := fmt.Sprintf("%s/pd/apis/keyvisual/v1/heatmaps", leader.GetAddr())
 	followerURL := fmt.Sprintf("%s/pd/apis/keyvisual/v1/heatmaps", followerSvr.GetAddr())
@@ -93,5 +104,5 @@ func (s *serverTestSuite) TestLeader(c *C) {
 	cfg.RuntimeServices = []string{"keyvisual"}
 	leader.GetServer().GetServerOption().SetPDServerConfig(cfg)
 	time.Sleep(time.Second)
-	checkReq(leaderURL, "\"not implemented\"\n")
+	checkReqCode(leaderURL, 200)
 }

@@ -13,10 +13,6 @@
 
 package matrix
 
-import (
-	"sort"
-)
-
 // Axis stores consecutive buckets. Each bucket has StartKey, EndKey, and some statistics. The EndKey of each bucket is
 // the StartKey of its next bucket. The actual data structure is stored in columns. Therefore satisfies:
 // len(Keys) == len(ValuesList[i]) + 1. In particular, ValuesList[0] is the base column.
@@ -53,7 +49,6 @@ func CreateEmptyAxis(startKey, endKey string, valuesListLen int) Axis {
 	for i := range valuesList {
 		valuesList[i] = values
 	}
-	SaveKeys(keys)
 	return CreateAxis(keys, valuesList)
 }
 
@@ -68,48 +63,14 @@ func (axis *Axis) Shrink(ratio uint64) {
 
 // Range returns a sub Axis with specified range.
 func (axis *Axis) Range(startKey string, endKey string) Axis {
-	if endKey != "" && startKey >= endKey {
-		panic("StartKey must be less than EndKey")
-	}
-
-	// ensure intersection
-	if endKey != "" && endKey <= axis.Keys[0] {
+	start, end, ok := KeysRange(axis.Keys, startKey, endKey)
+	if !ok {
 		return CreateEmptyAxis(startKey, endKey, len(axis.ValuesList))
 	}
-	axisEndKey := GetLastKey(axis.Keys)
-	if axisEndKey != "" && startKey >= axisEndKey {
-		return CreateEmptyAxis(startKey, endKey, len(axis.ValuesList))
-	}
-
-	keysLen := len(axis.Keys)
-	sortedKeysLen := keysLen
-	if axisEndKey == "" {
-		sortedKeysLen--
-	}
-
-	// start index (contain)
-	start := sort.Search(sortedKeysLen, func(i int) bool {
-		return axis.Keys[i] > startKey
-	})
-	if start > 0 {
-		start--
-	}
-
-	// end index (contain)
-	end := keysLen - 1
-	if endKey != "" {
-		end = sort.Search(sortedKeysLen, func(i int) bool {
-			return axis.Keys[i] >= endKey
-		})
-		if end == keysLen {
-			end--
-		}
-	}
-
-	keys := axis.Keys[start : end+1]
+	keys := axis.Keys[start:end]
 	valuesList := make([][]uint64, len(axis.ValuesList))
 	for i := range valuesList {
-		valuesList[i] = axis.ValuesList[i][start:end]
+		valuesList[i] = axis.ValuesList[i][start : end-1]
 	}
 	return CreateAxis(keys, valuesList)
 }

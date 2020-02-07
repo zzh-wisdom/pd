@@ -75,10 +75,13 @@ type Service struct {
 // NewKeyvisualService creates a HTTP handler for heatmaps service.
 func NewKeyvisualService(ctx context.Context, in input.StatInput, labelStrategy decorator.LabelStrategy) *Service {
 	// 生成一个策略，这个策略只是合并的，不包括压缩的
-	strategy := matrix.DistanceStrategy(labelStrategy, math.Phi, 15, 50)
+	//strategy := matrix.DistanceStrategy(labelStrategy, math.Phi, 15, 50)
 	// 生成一个分层队列
-	stat := storage.NewStat(defaultStatConfig, strategy, in.GetStartTime())
+	//stat := storage.NewStat(defaultStatConfig, strategy, in.GetStartTime())
 	// 开启线程不断维护label信息，从tidb中
+	strategy := matrix.DistanceStrategy(ctx, labelStrategy, 1.0/math.Phi, 15, 50)
+	stat := storage.NewStat(ctx, defaultStatConfig, strategy, in.GetStartTime())
+
 	go labelStrategy.Background()
 	// 从pd中不断获取region信息
 	go in.Background(stat)
@@ -168,6 +171,7 @@ func (s *Service) Heatmaps(w http.ResponseWriter, r *http.Request) {
 	baseTag := region.IntoTag(typ)
 	plane := s.stat.Range(startTime, endTime, startKey, endKey, baseTag)
 	resp := plane.Pixel(s.strategy, maxDisplayY, region.GetDisplayTags(baseTag))
+	resp.Range(startKey, endKey)
 	// TODO: An expedient to reduce data transmission, which needs to be deleted later.
 	resp.DataMap = map[string][][]uint64{
 		typ: resp.DataMap[typ],

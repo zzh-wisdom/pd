@@ -12,3 +12,11 @@
 // limitations under the License.
 
 package input
+
+import (
+	. "github.com/pingcap/check"
+)
+
+var _ = Suite(&testCoreSuite{})
+
+type testCoreSuite struct{}

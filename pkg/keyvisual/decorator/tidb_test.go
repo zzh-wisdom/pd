@@ -12,3 +12,11 @@
 // limitations under the License.
 
 package decorator
+
+import (
+	. "github.com/pingcap/check"
+)
+
+var _ = Suite(&testTiDBSuite{})
+
+type testTiDBSuite struct{}

@@ -12,3 +12,17 @@
 // limitations under the License.
 
 package input
+
+import (
+	"testing"
+
+	. "github.com/pingcap/check"
+)
+
+func TestInput(t *testing.T) {
+	TestingT(t)
+}
+
+var _ = Suite(&testInputSuite{})
+
+type testInputSuite struct{}

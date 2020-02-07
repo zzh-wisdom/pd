@@ -19,14 +19,24 @@ import (
 	"unsafe"
 )
 
-var keyMap sync.Map
+// KeyMap is used for string intern
+type KeyMap struct {
+	sync.RWMutex
+	sync.Map
+}
 
-// SaveKeys interns all strings.
-// FIXME: GC useless keys
-func SaveKeys(keys []string) {
+// SaveKey interns a string.
+func (km *KeyMap) SaveKey(key *string) {
+	uniqueKey, _ := km.LoadOrStore(*key, *key)
+	*key = uniqueKey.(string)
+}
+
+// SaveKeys interns all strings without using mutex.
+func (km *KeyMap) SaveKeys(keys []string) {
 	for i, key := range keys {
 		//消除重复的string
-		uniqueKey, _ := keyMap.LoadOrStore(key, key)
+		//uniqueKey, _ := keyMap.LoadOrStore(key, key)
+		uniqueKey, _ := km.LoadOrStore(key, key)
 		keys[i] = uniqueKey.(string)
 	}
 }

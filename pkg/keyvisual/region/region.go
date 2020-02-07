@@ -156,15 +156,19 @@ func CreateStorageAxis(regions []*core.RegionInfo, strategy matrix.Strategy) mat
 
 	preAxis := matrix.CreateAxis(keys, valuesList)
 	wash(&preAxis)
-	// axis := preAxis.Focus(strategy, preThreshold, len(keys)/preRatioTarget, preTarget)
-	axis := preAxis.Divide(strategy, preTarget)
-	matrix.SaveKeys(axis.Keys)
 
-	// ResponseTags -> StorageTags
+	axis := IntoStorageAxis(preAxis, strategy)
+	log.Info("New StorageAxis", zap.Int("region length", len(regions)), zap.Int("focus keys length", len(axis.Keys)))
+	return axis
+}
+
+// IntoStorageAxis converts ResponseAxis to StorageAxis.
+func IntoStorageAxis(responseAxis matrix.Axis, strategy matrix.Strategy) matrix.Axis {
+	// axis := preAxis.Focus(strategy, preThreshold, len(keys)/preRatioTarget, preTarget)
+	axis := responseAxis.Divide(strategy, preTarget)
 	var storageValuesList [][]uint64
 	// 把负载那一列的数据去掉
 	storageValuesList = append(storageValuesList, axis.ValuesList[1:]...)
-	log.Info("New StorageAxis", zap.Int("region length", len(regions)), zap.Int("focus keys length", len(axis.Keys)))
 	return matrix.CreateAxis(axis.Keys, storageValuesList)
 }
 
