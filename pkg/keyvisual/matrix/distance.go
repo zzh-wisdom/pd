@@ -26,7 +26,6 @@ import (
 // TODO:
 // * Multiplexing data between requests
 // * Limit memory usage
-
 type distanceHelper struct {
 	Scale [][]float64
 }
@@ -45,19 +44,23 @@ type distanceStrategy struct {
 
 // DistanceStrategy adopts the strategy that the closer the split time is to the current time, the more traffic is
 // allocated, when buckets are split.
+// FIXME：返回的没必要是个接口类型吧，使得代码更加难懂
 func DistanceStrategy(ctx context.Context, label decorator.LabelStrategy, ratio float64, level int, count int) Strategy {
 	pow := make([]float64, level)
 	for i := range pow {
 		pow[i] = math.Pow(ratio, float64(i))
 	}
+	//matrix.DistanceStrategy(ctx, labelStrategy, 1.0/math.Phi, 15, 50)
 	s := &distanceStrategy{
 		LabelStrategy: label,
 		SplitRatio:    ratio,
 		SplitLevel:    level,
 		SplitCount:    count,
 		SplitRatioPow: pow,
+		// 用于多线程的，workerCount是cpu的内核数
 		ScaleWorkers:  make([]chan *scaleTask, workerCount),
 	}
+	//
 	s.StartWorkers()
 	go func() {
 		<-ctx.Done()
@@ -78,10 +81,12 @@ func (s *distanceStrategy) GenerateHelper(chunks []chunk, compactKeys []string) 
 
 	// a column with the maximum value is virtualized on the right and left
 	virtualColumn := make([]int, keysLen)
+	// 初始值为轴的个数
 	MemsetInt(virtualColumn, axesLen)
 
 	// calculate left distance
 	// 这样是假定最左边的轴chunks[0]离compactKeys最近吗？
+	// dis的具体数值其实没啥用，只是用来辅助分层而已
 	updateLeftDis(dis[0], virtualColumn, chunks[0].Keys, compactKeys)
 	for i := 1; i < axesLen; i++ {
 		updateLeftDis(dis[i], dis[i-1], chunks[i].Keys, compactKeys)
@@ -93,6 +98,8 @@ func (s *distanceStrategy) GenerateHelper(chunks []chunk, compactKeys []string) 
 	for i := end - 1; i >= 0; i-- {
 		updateRightDis(dis[i], dis[i+1], chunks[i].Keys, compactKeys)
 	}
+	// 因此最后真正的dis是两者的最小值
+
 
 	return distanceHelper{
 		Scale: s.GenerateScale(chunks, compactKeys, dis),
@@ -121,6 +128,7 @@ func (s *distanceStrategy) Split(dst, src chunk, tag splitTag, axesIndex int, he
 		start++
 	}
 	end := start + 1
+	// fixme:这里又把空接口转回来，不是多此一举吗
 	scale := helper.(distanceHelper).Scale
 
 	switch tag {
@@ -220,6 +228,7 @@ func (s *distanceStrategy) GenerateScaleColumnWork(ch chan *scaleTask) {
 		// When it is not enough to accommodate maxDis, expand the capacity.
 		for tempMapCap <= maxDis {
 			tempMapCap *= 2
+			// fixme:这代码～～
 			tempMap = make([]float64, tempMapCap)
 		}
 
@@ -254,6 +263,7 @@ func (s *distanceStrategy) GenerateScaleColumnWork(ch chan *scaleTask) {
 =======*/
 		// generate scale column
 		start := 0
+		// 找到第一个相等key的位置
 		for startKey := keys[0]; !equal(compactKeys[start], startKey); {
 			start++
 		}
@@ -265,6 +275,7 @@ func (s *distanceStrategy) GenerateScaleColumnWork(ch chan *scaleTask) {
 			}
 
 			if start+1 == end {
+				// 未被分割的情况
 				// Optimize calculation when splitting into 1
 				scale[start] = 1.0
 				start++
@@ -282,10 +293,12 @@ func (s *distanceStrategy) GenerateScaleColumnWork(ch chan *scaleTask) {
 					d := tempDis[i]
 					if d != tempDis[i-1] {
 						level++
+						// 层数过大或者dis过小（太多）的，直接不分
 						if level >= s.SplitLevel || i >= s.SplitCount {
 							tempMap[d] = 0
 						} else {
 							// tempValue = math.Pow(s.SplitRatio, float64(level))
+							// 具体的值已经和dis无关，只和level有关
 							tempValue = s.SplitRatioPow[level]
 							tempMap[d] = tempValue
 						}
@@ -294,6 +307,7 @@ func (s *distanceStrategy) GenerateScaleColumnWork(ch chan *scaleTask) {
 					tempSum += tempValue
 				}
 				// Calculate scale
+				// 距离越大分得越少
 				for ; start < end; start++ {
 					scale[start] = tempMap[dis[start]] / tempSum
 				}
@@ -316,15 +330,21 @@ func (s *distanceStrategy) GenerateScaleColumnWork(ch chan *scaleTask) {
 
 // dis的长度等于compactKeys的长度
 // compactKeys应该是更细的轴
+// updateLeftDis(dis[0], virtualColumn, chunks[0].Keys, compactKeys)
+// 相当与计算key轴上每个分段在合并时，应该分给左边多少，dis就是具体参量
 func updateLeftDis(dis, leftDis []int, keys, compactKeys []string) {
 	CheckPartOf(compactKeys, keys)
+	// j变量用来遍历短的原始keys
 	j := 0
+	//这个是比较短的
 	keysLen := len(keys)
+	// for i:=0;i<len(compactKeys);i++
 	for i := range dis {
 		if j < keysLen && equal(compactKeys[i], keys[j]) {
 			dis[i] = 0
 			j++
 		} else {
+			// 应该这样理解：计算左边的距离时，认为越靠近左边的value距离越小
 			dis[i] = leftDis[i] + 1
 		}
 	}

@@ -79,6 +79,7 @@ func (s *layerStat) Reduce() {
 	axes := make([]matrix.Axis, 0, s.Ratio)
 
 	for i := 0; i < s.Ratio; i++ {
+		// Fixme:这个语句有点繁琐
 		s.StartTime = s.RingTimes[s.Head]
 		times = append(times, s.StartTime)
 		axes = append(axes, s.RingAxes[s.Head])

@@ -83,12 +83,14 @@ func (axis *Axis) Focus(strategy Strategy, threshold uint64, ratio int, target i
 	}
 
 	baseChunk := createChunk(axis.Keys, axis.ValuesList[0])
+	// Focus不会改变baseChunk
 	newChunk := baseChunk.Focus(strategy, threshold, ratio, target)
 	valuesListLen := len(axis.ValuesList)
 	newValuesList := make([][]uint64, valuesListLen)
 	newValuesList[0] = newChunk.Values
 	for i := 1; i < valuesListLen; i++ {
 		baseChunk.SetValues(axis.ValuesList[i])
+		// 根据newChunk.Keys基准进行投影合并
 		newValuesList[i] = baseChunk.Reduce(newChunk.Keys).Values
 	}
 	return CreateAxis(newChunk.Keys, newValuesList)
@@ -138,6 +140,7 @@ func createZeroChunk(keys []string) chunk {
 	if keysLen <= 1 {
 		panic("Keys length must be greater than 1")
 	}
+	// Fixme:直接生成chunk即可，无需再调用createChunk，导致不必要的判断
 	return createChunk(keys, make([]uint64, keysLen-1))
 }
 
@@ -203,6 +206,7 @@ func (c *chunk) GetFocusRows(threshold uint64) (count int) {
 		// 延迟半拍吧
 		bucketSum += value
 	}
+	// 注意
 	generateBucket(len(c.Values))
 
 	return
@@ -265,6 +269,10 @@ func (c *chunk) Divide(strategy Strategy, target int) chunk {
 
 	threshold := lowerThreshold
 	focusRows := c.GetFocusRows(threshold)
+	// target-focusRows是目标与实际的差值
+	// ratio实际意义可以看成是每ratio个桶可以多生成一个桶
+	// 实际压缩时还需避免越界问题，因而
+	// 该参数在实际做压缩时起到调节作用，防止把太多的桶压到一起
 	ratio := len(c.Values)/(target-focusRows) + 1
 	return c.Focus(strategy, threshold, ratio, target)
 }

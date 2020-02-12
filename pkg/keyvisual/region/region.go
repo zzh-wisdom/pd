@@ -34,6 +34,7 @@ const (
 type StatTag int
 
 const (
+	// 负载，写字节数加上读字节数
 	// Integration is The overall value of all other dimension statistics.
 	Integration StatTag = iota
 	// WrittenBytes is the size of the data written per minute.
@@ -148,7 +149,9 @@ func CreateStorageAxis(regions []*core.RegionInfo, strategy matrix.Strategy) mat
 		panic("At least one RegionInfo")
 	}
 
+	// 获取这一些列regions的key
 	keys := getKeys(regions)
+	// 二维数组，第一维是各种标签（种类）的数据
 	valuesList := make([][]uint64, len(ResponseTags))
 	for i, tag := range ResponseTags {
 		valuesList[i] = getValues(regions, tag)

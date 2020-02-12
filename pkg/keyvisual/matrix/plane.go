@@ -43,11 +43,14 @@ func CreateEmptyPlane(startTime, endTime time.Time, startKey, endKey string, val
 }
 
 // Compact compacts Plane into an axis.
+// fixme:压缩时全都按负载进行，不是很很合理
 func (plane *Plane) Compact(strategy Strategy) Axis {
 	chunks := make([]chunk, len(plane.Axes))
 	for i, axis := range plane.Axes {
+		// 也是以负载为基准
 		chunks[i] = createChunk(axis.Keys, axis.ValuesList[0])
 	}
+	// 合并成了一条轴
 	compactChunk, helper := compact(strategy, chunks)
 	valuesListLen := len(plane.Axes[0].ValuesList)
 	valuesList := make([][]uint64, valuesListLen)
@@ -56,6 +59,7 @@ func (plane *Plane) Compact(strategy Strategy) Axis {
 		compactChunk.SetZeroValues()
 		for i, axis := range plane.Axes {
 			chunks[i].SetValues(axis.ValuesList[j])
+			// 将其他类型的数值也一一合并
 			strategy.Split(compactChunk, chunks[i], splitAdd, i, helper)
 		}
 		valuesList[j] = compactChunk.Values
@@ -106,6 +110,7 @@ func (plane *Plane) Pixel(strategy Strategy, target int, displayTags []string) M
 func compact(strategy Strategy, chunks []chunk) (compactChunk chunk, helper interface{}) {
 	// get compact chunk keys
 	keySet := make(map[string]struct{})
+	// 标志End是否为正无穷，即""
 	unlimitedEnd := false
 	for _, c := range chunks {
 		end := len(c.Keys) - 1
@@ -126,8 +131,10 @@ func compact(strategy Strategy, chunks []chunk) (compactChunk chunk, helper inte
 	} else {
 		compactKeys = MakeKeys(keySet)
 	}
+	// 创建只有keys没有值的Chunk
 	compactChunk = createZeroChunk(compactKeys)
 
+	// 生成二维数组，存放着分配的比例数据
 	helper = strategy.GenerateHelper(chunks, compactChunk.Keys)
 	for i, c := range chunks {
 		strategy.Split(compactChunk, c, splitAdd, i, helper)

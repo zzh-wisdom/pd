@@ -79,9 +79,13 @@ func NewKeyvisualService(ctx context.Context, in input.StatInput, labelStrategy 
 	// 生成一个分层队列
 	//stat := storage.NewStat(defaultStatConfig, strategy, in.GetStartTime())
 	// 开启线程不断维护label信息，从tidb中
+
+	// 创建一个合并策略
 	strategy := matrix.DistanceStrategy(ctx, labelStrategy, 1.0/math.Phi, 15, 50)
+	// 创建分层存储队列
 	stat := storage.NewStat(ctx, defaultStatConfig, strategy, in.GetStartTime())
 
+	// 不断维护标签信息，也就是table信息
 	go labelStrategy.Background()
 	// 从pd中不断获取region信息
 	go in.Background(stat)
@@ -99,10 +103,17 @@ func NewKeyvisualService(ctx context.Context, in input.StatInput, labelStrategy 
 }
 
 // NewHandler creates a KeyvisualService with CoreInput.
+// main函数中会调用这个函数创建对应url的处理函数handler
 func NewHandler(ctx context.Context, svr *server.Server) (http.Handler, server.APIGroup) {
+	// 根据默认参数，创建StatInput输入接口， coreInput已经实现了这个接口
 	in := input.CoreInput(ctx, svr, defaultRegisterAPIGroupInfo)
+	// 创建标签生成策略，返回接口LabelStrategy，实际类型为tidbLabelStrategy
 	labelStrategy := decorator.TiDBLabelStrategy(ctx, svr, &defaultRegisterAPIGroupInfo, nil)
+
+	// 传入上面创建好实例
+	// 新建Keyvisual服务（包含后台维护数据和热图生成）
 	k := NewKeyvisualService(ctx, in, labelStrategy)
+
 	handler := negroni.New(
 		serverapi.NewRuntimeServiceValidator(svr, defaultRegisterAPIGroupInfo),
 		serverapi.NewRedirector(svr),

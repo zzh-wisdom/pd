@@ -67,8 +67,8 @@ func (s *tidbLabelStrategy) updateAddress() {
 	var info serverInfo
 	for i := 0; i < retryCnt; i++ {
 		var tidbAddress []string
-		// 这里不太懂啊，慢慢学吧
-		ectx, cancel := context.WithTimeout(s.ctx, etcdGetTimeout)
+
+		ectx, cancel := context.WithTimeout(s.ctx, etcdGetTimeout)//限制超时时间1s
 		resp, err := cli.Get(ectx, tidbServerInformationPath, clientv3.WithPrefix())
 		cancel()
 		if err != nil {
@@ -84,7 +84,7 @@ func (s *tidbLabelStrategy) updateAddress() {
 			}
 			tidbAddress = append(tidbAddress, fmt.Sprintf("%s:%d", info.IP, info.StatusPort))
 		}
-		if len(tidbAddress) > 0 {
+		if len(tidbAddress) > 0 { //这里更新了tidbAddress后，不直接返回吗，否则下次循环，会将上次的数据覆盖，导致上次做无用功
 			s.tidbAddress = tidbAddress
 		}
 	}
