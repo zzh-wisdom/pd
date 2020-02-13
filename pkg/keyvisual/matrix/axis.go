@@ -164,6 +164,7 @@ func (c *chunk) Clear() {
 // Calculation
 
 // Reduce generates new chunks based on the more sparse newKeys
+// 细轴向压缩后的轴投影
 func (c *chunk) Reduce(newKeys []string) chunk {
 	keys := c.Keys
 	CheckReduceOf(keys, newKeys)

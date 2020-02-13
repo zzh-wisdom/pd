@@ -212,6 +212,7 @@ func (s *distanceStrategy) GenerateScaleColumnWork(ch chan *scaleTask) {
 
 	for task := range ch {
 		if task == nil {
+			// 遇到nil的task说明程序需要结束了
 			break
 		}
 

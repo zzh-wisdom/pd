@@ -168,6 +168,7 @@ func CreateStorageAxis(regions []*core.RegionInfo, strategy matrix.Strategy) mat
 // IntoStorageAxis converts ResponseAxis to StorageAxis.
 func IntoStorageAxis(responseAxis matrix.Axis, strategy matrix.Strategy) matrix.Axis {
 	// axis := preAxis.Focus(strategy, preThreshold, len(keys)/preRatioTarget, preTarget)
+	// 重新划分成合适大小
 	axis := responseAxis.Divide(strategy, preTarget)
 	var storageValuesList [][]uint64
 	// 把负载那一列的数据去掉

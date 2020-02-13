@@ -48,7 +48,7 @@ func GetLastKey(keys []string) string {
 }
 
 // CheckPartOf checks that part keys are a subset of src keys.
-// 粗略判断～
+// 范围判断～
 func CheckPartOf(src, part []string) {
 	err := src[0] > part[0] || len(src) < len(part)
 	srcLastKey := GetLastKey(src)

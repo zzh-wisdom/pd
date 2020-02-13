@@ -43,14 +43,12 @@ func CreateEmptyPlane(startTime, endTime time.Time, startKey, endKey string, val
 }
 
 // Compact compacts Plane into an axis.
-// fixme:压缩时全都按负载进行，不是很很合理
 func (plane *Plane) Compact(strategy Strategy) Axis {
 	chunks := make([]chunk, len(plane.Axes))
 	for i, axis := range plane.Axes {
-		// 也是以负载为基准
 		chunks[i] = createChunk(axis.Keys, axis.ValuesList[0])
 	}
-	// 合并成了一条轴
+	// 合并成了一条轴，helper实际只与keys有关
 	compactChunk, helper := compact(strategy, chunks)
 	valuesListLen := len(plane.Axes[0].ValuesList)
 	valuesList := make([][]uint64, valuesListLen)
@@ -68,6 +66,7 @@ func (plane *Plane) Compact(strategy Strategy) Axis {
 }
 
 // Pixel pixelates Plane into a matrix with a number of rows close to the target.
+// 要防止修改原数据
 func (plane *Plane) Pixel(strategy Strategy, target int, displayTags []string) Matrix {
 	valuesListLen := len(plane.Axes[0].ValuesList)
 	if valuesListLen != len(displayTags) {
@@ -89,6 +88,7 @@ func (plane *Plane) Pixel(strategy Strategy, target int, displayTags []string) M
 		goCompactChunk := createZeroChunk(compactChunk.Keys)
 		for i, axis := range plane.Axes {
 			goCompactChunk.Clear()
+			// 用同一个helper
 			strategy.Split(goCompactChunk, createChunk(chunks[i].Keys, axis.ValuesList[j]), splitTo, i, helper)
 			data[i] = goCompactChunk.Reduce(baseKeys).Values
 		}

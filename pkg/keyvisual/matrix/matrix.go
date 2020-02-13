@@ -39,6 +39,7 @@ func CreateMatrix(strategy Strategy, times []time.Time, keys []string, valuesLis
 	// collect unix times
 	timeAxis := make([]int64, len(times))
 	for i, t := range times {
+		// 用时间戳返回
 		timeAxis[i] = t.Unix()
 	}
 	return Matrix{

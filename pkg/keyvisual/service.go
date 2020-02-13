@@ -135,7 +135,6 @@ func (s *Service) Heatmaps(w http.ResponseWriter, r *http.Request) {
 	startTime := endTime.Add(-360 * time.Minute)
 
 	if startTimeString != "" {
-		// ##需学习
 		tsSec, err := strconv.ParseInt(startTimeString, 10, 64)
 		if err != nil {
 			log.Error("parse ts failed", zap.Error(err))
@@ -166,7 +165,7 @@ func (s *Service) Heatmaps(w http.ResponseWriter, r *http.Request) {
 		zap.String("end-key", endKey),
 		zap.String("type", typ),
 	)
-	// ##hex需学习
+	// 如果是""字符串，解码出来的仍然是""字符串
 	if startKeyBytes, err := hex.DecodeString(startKey); err == nil {
 		startKey = string(startKeyBytes)
 	} else {
@@ -179,16 +178,18 @@ func (s *Service) Heatmaps(w http.ResponseWriter, r *http.Request) {
 		s.rd.JSON(w, http.StatusBadRequest, "bad request")
 		return
 	}
+	// 默认是负载
 	baseTag := region.IntoTag(typ)
 	plane := s.stat.Range(startTime, endTime, startKey, endKey, baseTag)
 	resp := plane.Pixel(s.strategy, maxDisplayY, region.GetDisplayTags(baseTag))
 	resp.Range(startKey, endKey)
 	// TODO: An expedient to reduce data transmission, which needs to be deleted later.
 	resp.DataMap = map[string][][]uint64{
+		// 去掉其余的数据，只保留typ类型的
 		typ: resp.DataMap[typ],
 	}
-	// ----------
 
+	// 可以返回json文本类型，也可以是json文本压缩成gzip的类型
 	var encoder *json.Encoder
 	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 		w.Header().Set("Content-Encoding", "gzip")

@@ -54,6 +54,7 @@ func newLayerStat(conf LayerConfig, strategy matrix.Strategy, startTime time.Tim
 		StartTime: startTime,
 		EndTime:   startTime,
 		RingAxes:  make([]matrix.Axis, conf.Len),
+		// 注意RingTimes长度和RingAxes是相等的
 		RingTimes: make([]time.Time, conf.Len),
 		Head:      0,
 		Tail:      0,
@@ -91,6 +92,7 @@ func (s *layerStat) Reduce() {
 	newAxis := plane.Compact(s.Strategy)
 	newAxis = region.IntoResponseAxis(newAxis, region.Integration)
 	newAxis = region.IntoStorageAxis(newAxis, s.Strategy)
+	// 求平均值，所以最终显示到前端的，都是平均每分钟的数据，不会因为数据压缩而变化单位
 	newAxis.Shrink(uint64(s.Ratio))
 	s.Next.Append(newAxis, s.StartTime)
 }
@@ -122,9 +124,12 @@ func (s *layerStat) Range(startTime, endTime time.Time) (times []time.Time, axes
 		size += s.Len
 	}
 
+	// 找到第一个时间比startTime更晚的
 	start := sort.Search(size, func(i int) bool {
 		return s.RingTimes[(s.Head+i)%s.Len].After(startTime)
 	})
+
+	// 找到第一个时间不比endTime早的
 	end := sort.Search(size, func(i int) bool {
 		return !s.RingTimes[(s.Head+i)%s.Len].Before(endTime)
 	})
@@ -206,6 +211,7 @@ func (s *Stat) rebuildKeyMap() {
 }
 
 func (s *Stat) rebuildRegularly(ctx context.Context) {
+	// 24小时重构一次keyMap,回收没用的key
 	ticker := time.NewTicker(time.Hour * 24)
 	defer ticker.Stop()
 	for {
@@ -250,6 +256,7 @@ func (s *Stat) Range(startTime, endTime time.Time, startKey, endKey string, base
 	times, axes := s.rangeRoot(startTime, endTime)
 
 	if len(times) <= 1 {
+		// 空数据
 		return matrix.CreateEmptyPlane(startTime, endTime, startKey, endKey, len(region.ResponseTags))
 	}
 
